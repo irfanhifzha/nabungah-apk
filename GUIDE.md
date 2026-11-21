@@ -1,0 +1,394 @@
+# Nabungah — Rebuild Specification
+
+> **Purpose of this document.** It describes *what the app does* and *exactly how each feature behaves*, so an agent can rebuild Nabungah from scratch with different technology. Read it as a product + behavior spec, not as documentation of the old codebase.
+>
+> **Target of the rebuild:** a native Android app (APK), single-user, **fully offline**, local database (SQLite), minimal and compact — small APK, fast cold start, low memory, no network dependency, no accounts, no login, no telemetry.
+
+---
+
+## 0. What the app is
+
+Nabungah ("nabung" = saving) is a personal money tracker. You record **where your money physically sits** (cash, e-wallet, bank), log income and spending against those places, set savings targets, and freeze a snapshot of your finances at the end of each month.
+
+- **One user, one device, no account.** There is no sign-up, login, password, session, profile screen, or cloud sync. The app opens straight into the dashboard with the local data.
+- **There is no user identity anywhere in the data model** — no `user_id`, no `uid`, no per-user partitioning. All rows belong to the installation.
+- The whole product is **one dashboard screen** plus small modal dialogs (bottom sheets on Android) for every create/edit/delete action.
+- All money values are **Indonesian Rupiah integers** (no cents, no other currency).
+
+### Dashboard section order (top → bottom)
+
+1. **Wallets**
+2. **Nabung** (savings goals)
+3. **Quick Actions**
+4. **Recent Transactions**
+5. **Monthly Overview** (current month, live)
+6. **Monthly History** (saved snapshots)
+
+This order is the product's structure; keep it.
+
+---
+
+## 1. Core concepts
+
+| Concept | Meaning |
+|---|---|
+| **Wallet** | A place money sits: Cash, DANA, Bank Jago. Holds a balance. |
+| **Transaction** | One movement of money into or out of one wallet. `income` or `expense`. Also carries the *title* and an optional note. |
+| **Quick Action** | A saved transaction template (title + amount + type). Fills the transaction form in one tap. Never moves money itself. |
+| **Goal** | A savings target with a saved amount and status. **Not linked to any wallet.** |
+| **Transfer ("Tukar Uang")** | Moves a balance between two wallets without income/expense semantics. Creates **no** record. |
+| **Monthly snapshot** | A stored copy of that month's totals. Saved manually. |
+| **Fee %** | A notional percentage of income, stored per snapshot. Never deducted from anything. |
+
+---
+
+## 2. Money & number rules (global)
+
+- Store money as **integer Rupiah** (`INTEGER`, value in rupiah, e.g. `1500000`). Never floats.
+- **Display format:** `Rp 1.500.000` — `Rp` + space + `id-ID` grouping with dots as thousand separators.
+- **Input format:** as the user types, strip everything non-numeric and re-group with dots (`20000` → `20.000`). Keyboard is numeric; text field shows grouped digits.
+- Negative balances are invalid everywhere (wallet balance, saved amount, transaction amount, transfer amount).
+- Fee percentages are the only decimal value. Accept one decimal separator, preferring `,` or `.` per the user's locale; do not silently drop the fraction part when the user types `2,5`.
+- Rounding of computed fee: `round(income * feePercent / 100)` to whole rupiah.
+
+### Date & month rules
+
+- **Transaction dates are always "now".** There is no date picker. Every saved transaction takes the device-local timestamp at save time.
+- Month key is `YYYY-MM` derived from the local timestamp (`2026-05`).
+- Display of a transaction timestamp: weekday short, `dd/MM/yyyy`, `HH:mm`, 24-hour, `id-ID`.
+- All grouping/filtering by month uses device-local time. State the timezone assumption explicitly in the rebuild (device timezone, no UTC conversion surprises).
+
+---
+
+## 3. Wallets
+
+**A wallet = `name` + `balance`.**
+
+### Add wallet
+- Fields: Wallet Name (required), Starting Balance (Rp, required ≥ 0).
+- New wallets hold exactly the starting balance typed — they do **not** start at zero. Copy must make it obvious to enter the *current real* balance.
+- Validation: non-empty name after trim; balance must be a valid non-negative integer.
+- On save: insert wallet with `created_at = updated_at = now`.
+
+### Display
+- List of all wallets: name (small, muted) and balance (large, bold).
+- Empty state: "No wallet yet".
+- **Total Balance** (used in Monthly Overview) = sum of all wallet balances.
+
+### Delete wallets
+- Modal lists all wallets; select one → Delete, or Delete All.
+- Both require a confirmation step.
+- **Deleting a wallet does not move, refund, or zero anything.** Its money simply leaves Total Balance. Transactions referencing it become orphans and must still render (wallet label fallback: `Unknown Wallet`).
+- In the rebuild, prefer a **foreign-key policy that preserves history** (`ON DELETE SET NULL`, or soft-delete the wallet) over cascading deletes of transactions. If you change this, say so — it is a deliberate product decision, not an implementation detail.
+- The delete dialog must warn: deleting a wallet does not move its balance.
+
+### Not supported
+- No wallet editing/renaming (only add/delete). If added, define explicitly whether renaming touches anything else (it should not).
+
+---
+
+## 4. Transactions
+
+**A transaction = `title`, `amount`, `type` ∈ {income, expense}, `wallet_id`, `note` (optional), `occurred_at`.**
+
+### Add transaction
+Entry points:
+1. "+ Add" in Recent Transactions (empty form).
+2. Tapping a Quick Action (form pre-filled with the action's title, amount, type; wallet still empty).
+
+Form fields: Title, Amount (Rp), Type (Expense `-` / Income `+`, default Expense), Wallet (required select), Note (optional).
+
+Validation, in order:
+1. Title non-empty after trim → else "Title is required".
+2. Amount > 0 → else "Amount must be greater than 0".
+3. Wallet selected → else "Please select wallet".
+4. For **expense**: `wallet.balance - amount >= 0` → else "Insufficient wallet balance".
+5. Amount ≤ available balance for the chosen wallet (same check, phrased for income it's always true).
+
+On save, **atomically** do both:
+- insert transaction;
+- set `wallet.balance += amount` (income) or `-= amount` (expense), `wallet.updated_at = now`.
+
+> **Rebuild requirement:** the two writes must be one database transaction. The old version performed them as two independent writes, which could leave the list and the wallets disagreeing. Do not reproduce that.
+
+### Transaction list
+- Sorted newest first by `occurred_at`.
+- Header line: `Showing {displayed} of {filtered} transactions`.
+- Filters (three dropdowns, all defaulting to show everything):
+  - **Month**: `All Months` + every month that currently has transactions, newest first.
+  - **Type**: `All Types` / `Income` / `Expense`.
+  - **Limit**: `10` / `20` / `50` / `100` (default 10).
+- The limit only truncates rows. The "of N" count reflects the filtered set *before* the limit.
+- Month options are derived from data — a month with no transactions must not appear.
+- Empty state: "No transactions yet".
+
+Each row shows: title, formatted timestamp, wallet name, note (only if present), and the signed amount: `+ Rp …` green for income, `- Rp …` red for expense.
+
+### Copy to clipboard
+Per-row button copies this exact WhatsApp-style block (blank line handling as shown):
+
+```
+*🧾 Transaksi Title: {title}*
+💰 Amount: Rp {amount}
+📌 Type: {income|expense}
+🏦 Wallet: {wallet name}
+🗓️ Date: {weekday short}, {dd}/{MM}/{yyyy}, {HH}:{mm}
+📝 Note: {note or "-"}
+```
+
+- The button shows a checkmark for ~1.5 s after copying.
+- No file export, no CSV, no sharing intent is required by the original — plain clipboard text.
+
+### Delete transactions
+- Modal: select one → Delete, or Delete All. Confirmation on both.
+- **Delete All should be a single database transaction.**
+- **Product gap to resolve in the rebuild:** the old app did **not** reverse the wallet balance when a transaction was deleted, leaving balances permanently skewed. For the rebuild, choose and implement one of:
+  - **(recommended)** deleting a transaction also reverses its effect on the wallet (guarded so balance never goes negative), or
+  - keep balances untouched and state it loudly in the delete confirmation.
+  
+  Whichever you pick, the spec must be explicit and the behavior tested.
+- **No editing of transactions.** If you add edit, it must adjust the wallet balance by the delta and must handle a change of type, amount, or wallet atomically.
+
+---
+
+## 5. Quick Actions
+
+**A Quick Action = `title`, `amount`, `type`.** A reusable template.
+
+- Displayed as a 2-column grid of tappable cards: title (semibold) + signed amount (green/red).
+- Empty state: "No Quick Actions yet".
+- **Tap → opens the New Transaction form pre-filled** with title, amount, type. The user still picks a wallet, may change anything, and saves. The Quick Action is not consumed, not modified, and does not itself create anything.
+- Create: title (required), amount (> 0), type (default Expense).
+- Delete: picker with delete-one and delete-all, both confirmed.
+
+No edit action for quick actions — recreating means delete + add.
+
+---
+
+## 6. Nabung — savings goals
+
+**A goal = `title`, `target_amount`, `saved_amount`, `status` ∈ {in_progress, completed, cancelled}.**
+
+### Create
+- Fields: Goal Title (required), Target Amount (Rp, > 0).
+- New goal always: `saved_amount = 0`, `status = in_progress`.
+
+### Display
+Each goal card shows:
+- Title.
+- Status, capitalized with `_` replaced by a space; colour: `in_progress` orange, `completed` green, `cancelled` red.
+- Progress bar: `saved / target * 100`, clamped to 0–100, width animates (~500 ms); guard `target = 0` (treat as 1 or 0%, never divide by zero).
+- Percentage label, rounded to integer, clamped at 100.
+- `Saved` (green) and `Target` (neutral) amounts.
+- A permanent note under the list: goals are **not** connected to wallets, so the user must move money manually.
+
+### Edit
+- The editor exposes: title, target amount, saved amount (≥ 0), status (In Progress / Completed / Cancelled).
+- Validation: title non-empty, target > 0, saved ≥ 0.
+- Save sets `updated_at`.
+- Editor also contains **Remove** (confirmation required).
+
+### Hard rule
+- **Goals never read or write wallet balances, and never create transactions.** Do not "improve" this by auto-deducting; it would break the mental model. If the rebuild adds a link, it must be opt-in and clearly surfaced.
+
+---
+
+## 7. Tukar Uang — move money between wallets
+
+Purpose: ATM withdrawal, top-up from bank, moving money between e-wallets. **Not income, not expense.**
+
+Fields: Amount (Rp), Source wallet, Destination wallet.
+
+Validation, in order:
+1. Amount > **1.000** (strictly greater; 1.000 is rejected).
+2. Both wallets selected → else "Please select both wallets".
+3. Source ≠ Destination → else "Wallet asal and tujuan cannot be the same".
+4. Source wallet exists and `source.balance >= amount`, checked against the **database value at submit time**, not the cached list.
+5. Destination wallet exists.
+6. Confirmation prompt before writing.
+
+On save: subtract from source, add to destination, both `updated_at = now`, **in one database transaction**.
+
+Consequences to preserve:
+- **No record is created.** Transfers do not appear in the transaction list, Monthly Overview, or any history. They only change wallet balances and therefore Total Balance stays the same.
+- Because no record is created, the rebuild must not imply otherwise in the UI. If transfer history is added later, it must be a new, separate table and must not feed income/expense totals.
+
+---
+
+## 8. Monthly Overview (current month, live)
+
+Always reflects **the device's current month**, independent of the transaction page's month filter.
+
+Shows:
+- `{YYYY-MM}` of the current month.
+- **Total Balance** = sum of all wallet balances (all-time, not month-scoped).
+- **Total Income** = sum of income transactions whose month = current month.
+- **Total Expense** = sum of expense transactions whose month = current month.
+- **Fee %** — editable, default **2.5**, persisted only through the snapshot flow.
+- **Fee Expense** = `round(Total Income × Fee % / 100)`; purely informational, not deducted anywhere.
+- **Sync Data** button → opens the snapshot dialog (§9).
+
+Rebuild notes:
+- Recompute from the database on any data change; these are derived values, never stored.
+- The fee percentage is a **draft** on the dashboard until saved into a snapshot. Do not persist it as a global setting unless you explicitly decide to (the original resets to 2.5 on reload).
+- Accept decimal fee input (e.g. `2,5`). The original stripped the decimal character, making 2.5 untypeable — fix it.
+
+---
+
+## 9. Monthly History — manual snapshots
+
+A snapshot freezes one month's totals.
+
+### Sync dialog
+- Pre-filled with the live values: month (current `YYYY-MM`), Total Balance, Total Income, Total Expense, Fee %, Fee Expense.
+- All fields are **editable before saving** — a snapshot is deliberately whatever the user confirms, not necessarily what the transactions produce.
+- Confirmation prompt, then save.
+- **One row per month: month is the primary key.** Saving the same month again overwrites that snapshot (upsert), it does not append. State this in the dialog if space allows.
+- Store `updated_at`.
+
+### History list
+- Sorted by month descending.
+- Each row shows: month, income (green), expense (red), balance, fee amount with its percentage, and last updated time.
+- Empty state: "No monthly snapshots yet".
+- **Copy to clipboard** per row, exact block:
+
+```
+*📅 Data Statistik Bulan: {month}*
+💰 Total Income: Rp {totalIncome}
+💸 Total Expense: Rp {totalExpense}
+💼 Total Balance: Rp {totalBalance}
+💳 Fee ({feePercent}%): Rp {feeExpense}
+🕒 Updated: {updatedAt}
+```
+(Checkmark feedback ~1.5 s, as with transactions.)
+
+### Delete
+- Delete one selected snapshot or delete all, each confirmed.
+
+Snapshots are independent: deleting transactions does not alter old snapshots, and deleting snapshots touches no transactions or wallets.
+
+---
+
+## 10. Data model for the rebuild (SQLite)
+
+Suggested schema. All monetary columns are rupiah `INTEGER`. Timestamps stored as UTC epoch millis, displayed in device-local time.
+
+```sql
+wallet (
+  id            INTEGER PRIMARY KEY,
+  name          TEXT    NOT NULL,
+  balance       INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+
+trx (
+  id            INTEGER PRIMARY KEY,
+  title         TEXT    NOT NULL,
+  amount        INTEGER NOT NULL CHECK (amount > 0),
+  type          TEXT    NOT NULL CHECK (type IN ('income','expense')),
+  wallet_id     INTEGER REFERENCES wallet(id) ON DELETE SET NULL,
+  note          TEXT    NOT NULL DEFAULT '',
+  occurred_at   INTEGER NOT NULL,          -- always "now" at insert
+  month         TEXT    NOT NULL           -- 'YYYY-MM', derived from occurred_at
+);
+CREATE INDEX idx_trx_month ON trx(month);
+CREATE INDEX idx_trx_occurred ON trx(occurred_at DESC);
+
+quick_action (
+  id            INTEGER PRIMARY KEY,
+  title         TEXT    NOT NULL,
+  amount        INTEGER NOT NULL CHECK (amount > 0),
+  type          TEXT    NOT NULL CHECK (type IN ('income','expense')),
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+
+goal (
+  id            INTEGER PRIMARY KEY,
+  title         TEXT    NOT NULL,
+  target_amount INTEGER NOT NULL CHECK (target_amount > 0),
+  saved_amount  INTEGER NOT NULL DEFAULT 0 CHECK (saved_amount >= 0),
+  status        TEXT    NOT NULL DEFAULT 'in_progress'
+                CHECK (status IN ('in_progress','completed','cancelled')),
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER
+);
+
+month_snapshot (
+  month         TEXT PRIMARY KEY,          -- 'YYYY-MM', upsert target
+  total_balance INTEGER NOT NULL,
+  total_income  INTEGER NOT NULL,
+  total_expense INTEGER NOT NULL,
+  fee_percent   REAL    NOT NULL DEFAULT 2.5,
+  fee_expense   INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+```
+
+Notes:
+- Keep `month` on `trx` **or** derive it with a query; if derived, index `occurred_at` and compute the range bounds in the app so month filtering stays fast on large datasets.
+- Integrity rules that must be enforced in code, inside one DB transaction: wallet balance changes always accompany (a) a transaction insert and, if you adopt §4's recommended delete behavior, a transaction delete, or (b) a transfer between two wallets.
+- Add `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL`.
+- No `users` table, no auth tables, no sync/queue tables.
+
+---
+
+## 11. Screens & interactions for an Android build
+
+- **Single activity**, dashboard scroll column. Bottom sheets (or full-width dialogs) replace the web modals: Add Wallet, New Transaction, New Quick Action, Create Goal, Edit Goal, Tukar Uang, Sync Month, Delete Wallets, Delete Transactions, Delete Quick Actions, Delete Monthly Data.
+- Every destructive action confirms via dialog; "Delete All" is a separate, clearly-labelled red action.
+- Keep the copy-to-clipboard affordances (§4, §9) using the Android clipboard.
+- Empty states for all five lists, exactly as specified.
+- No navigation drawer, no tabs, no settings screen, no onboarding — the original has none, and adding them conflicts with "minimal".
+- Since it is offline-only, there must be **no splash/login gate**: first launch shows the empty dashboard.
+
+---
+
+## 12. Non-functional requirements (the point of the rebuild)
+
+- **Fully offline.** No network permission required at all. No Firebase, no remote sync, no crash reporting, no analytics, no ads.
+- **Small.** Strip to the minimum: no image-heavy assets, no web view shell. Target a release APK under ~5 MB if achievable; treat under ~10 MB as acceptable.
+- **Fast.** Cold start to interactive dashboard well under 1 second on a low-end Android phone (e.g. 2 GB RAM). No blocking work on the main thread for DB queries.
+- **Light.** Idle memory footprint small; lists must be lazy (recycled/`LazyColumn`), not built all at once. The "limit 10/20/50/100" selector exists precisely because the list is not meant to render everything.
+- **Compact code.** One screen, five entities, no frameworks beyond what the platform needs. Do not introduce DI graphs, navigation libraries, or ORMs that dominate the binary for six tables.
+- **Data safety.** All balance-mutating operations are transactional; a failed write must leave consistent state. Provide a simple local backup story (e.g. export/import a single DB or JSON file) only if it does not bloat the app; the original had none.
+- **Battery/CPU:** no polling, no timers. Recompute derived totals on data change only.
+
+---
+
+## 13. Known behaviors to decide on (do not copy blindly)
+
+These are real inconsistencies in the original. Each needs an explicit decision in the rebuild:
+
+1. **Transaction delete does not refund the wallet.** Either reverse it (recommended) or warn clearly.
+2. **Two non-atomic writes** on create (transaction + wallet) and on transfer. Must become atomic.
+3. **Fee % cannot hold a decimal** in the original input. Support `2,5` / `2.5`.
+4. **Wallet delete orphans history** ("Unknown Wallet"). Keep orphan rendering, and choose `SET NULL`/soft delete instead of cascade.
+5. **Monthly Overview ignores the transaction month filter.** It is always *this* month. Keep or expose a month selector — but if you add one, the "current month" default must stay.
+6. **Filter defaults to "All Months"** even though the older README claimed current month. Spec says All Months.
+7. **No transfer history.** Transfers are invisible after the fact. If you add history, keep it separate from income/expense.
+8. **Goal ↔ wallet are decoupled by design.** Don't auto-connect.
+
+---
+
+## 14. Acceptance checklist
+
+- [ ] App installs and opens directly to an empty dashboard; no login, no network access.
+- [ ] Wallet: add with starting balance; sum equals Total Balance; delete warns and leaves history readable as `Unknown Wallet`.
+- [ ] Transaction: expense blocked when it would make a wallet negative; wallet balance and list update together or not at all.
+- [ ] Transaction filters: month options derived from data; type; limit truncates but "X of Y" uses the unfiltered-by-limit count.
+- [ ] Copy block for a transaction matches §4 exactly, including emoji and `id-ID` formatting.
+- [ ] Quick Action tap pre-fills the form and does not modify the action.
+- [ ] Goal: create at 0 progress, edit saved/target/status, progress capped at 100%, remove confirmed, wallets untouched.
+- [ ] Tukar Uang: rejects ≤ 1.000, rejects same wallet, checks DB balance, moves money atomically, creates no transaction, Total Balance unchanged.
+- [ ] Monthly Overview: income/expense for the current month only, fee = round(income × %), fee never deducted.
+- [ ] Sync: upserts by month, overwrites on re-sync, editable fields, appears in history sorted newest first; copy block matches §9.
+- [ ] Delete-All operations work in one transaction and are confirmed.
+- [ ] Offline from first launch; cold start < 1 s on low-end hardware; APK size within target.
+
+---
+
+## 15. Out of scope
+
+Multi-user, accounts/auth, cloud sync, budgets per category, recurring transactions, charts/analytics screens, currency conversion, CSV/Sheets export, ads, sharing, dark-mode theming (unless added cheaply and deliberately), and anything else not described above. The value of this app is that it is small and does one job.
