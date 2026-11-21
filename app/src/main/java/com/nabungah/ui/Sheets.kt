@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.nabungah.data.AppData
 import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
 import com.nabungah.data.Snapshot
@@ -42,23 +45,55 @@ import kotlinx.coroutines.delay
 // ---------------------------------------------------------------- clipboard
 
 fun trxCopyText(t: Trx, walletName: String): String = buildString {
-    append("*🧾 Transaksi: ${t.title}*\n")
-    append("💰 Nominal: ${Fmt.rp(t.amount)}\n")
-    append("📌 Tipe: ${if (t.type == "income") "Pemasukan" else "Pengeluaran"}\n")
-    append("🏦 Dompet: $walletName\n")
-    append("🗓️ Tanggal: ${Fmt.timestamp(t.occurredAt)}\n")
-    append("📝 Catatan: ${t.note.ifBlank { "-" }}")
+    append("*Nabungah — Transaksi*\n")
+    append("${t.title}\n")
+    append("${Fmt.rp(t.amount)} · ${if (t.type == "income") "Pemasukan" else "Pengeluaran"}\n")
+    append("Dompet: $walletName\n")
+    append("Tanggal: ${Fmt.timestamp(t.occurredAt)}\n")
+    append("Catatan: ${t.note.ifBlank { "-" }}")
 }
 
 fun snapshotCopyText(s: Snapshot): String = buildString {
-    append("*📅 Statistik Bulan: ${s.month}*\n")
-    append("🔁 Sumber: ${if (s.isManual) "Manual" else "Otomatis"}\n")
-    append("💰 Total Pemasukan: ${Fmt.rp(s.totalIncome)}\n")
-    append("💸 Total Pengeluaran: ${Fmt.rp(s.totalExpense)}\n")
-    append("💼 Total Saldo: ${Fmt.rp(s.totalBalance)}\n")
-    append("💳 Biaya (${Fmt.feePercentLabel(s.feePercent)}%): ${Fmt.rp(s.feeExpense)}\n")
-    append("🕒 Diperbarui: ${Fmt.timestamp(s.updatedAt)}")
+    append("*Nabungah — ${Fmt.monthLabel(s.month)}*\n")
+    append("Sumber: ${if (s.isManual) "Manual" else "Otomatis"}\n")
+    append("Pemasukan: ${Fmt.rp(s.totalIncome)}\n")
+    append("Pengeluaran: ${Fmt.rp(s.totalExpense)}\n")
+    append("Saldo: ${Fmt.rp(s.totalBalance)}\n")
+    append("Biaya (${Fmt.feePercentLabel(s.feePercent)}%): ${Fmt.rp(s.feeExpense)}\n")
+    append("Diperbarui: ${Fmt.timestamp(s.updatedAt)}")
 }
+
+/** Compact, chat-ready copy of one month: summary first, then one line per transaction. */
+fun monthCopyText(
+    month: String,
+    report: MonthReport,
+    transactions: List<Trx>,
+    walletNames: Map<Long, String>,
+): String = buildString {
+    append("*Nabungah — ${Fmt.monthLabel(month)}*\n")
+    append("Pemasukan: ${Fmt.rp(report.income)}\n")
+    append("Pengeluaran: ${Fmt.rp(report.expense)}\n")
+    append("Selisih: ${signed(report.net)}\n")
+    append("Transaksi: ${report.count}\n")
+    append("Saldo akhir bulan: ${Fmt.rp(report.balance)}\n")
+    val rows = transactions
+        .filter { it.month == month }
+        .sortedByDescending { it.occurredAt }
+    append("\nRincian:\n")
+    if (rows.isEmpty()) {
+        append("Belum ada transaksi.")
+    } else {
+        rows.forEachIndexed { index, t ->
+            if (index > 0) append('\n')
+            val sign = if (t.type == "income") "+ " else "- "
+            append("${Fmt.dayMonth(t.occurredAt)} ${t.title} — $sign${Fmt.rp(t.amount)}")
+            append(" · ${walletNames[t.walletId] ?: "Dompet dihapus"}")
+        }
+    }
+}
+
+private fun signed(value: Long): String =
+    if (value < 0) "- " + Fmt.rp(-value) else "+ " + Fmt.rp(value)
 
 private fun copyToClipboard(context: Context, label: String, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -75,20 +110,16 @@ fun CopyButton(text: String, modifier: Modifier = Modifier) {
             copied = false
         }
     }
-    TextButton(
+    OutlinedActionButton(
+        text = if (copied) "✓ Tersalin" else "Salin",
         onClick = {
             copyToClipboard(context, "Nabungah", text)
             copied = true
         },
         modifier = modifier,
-    ) {
-        Text(
-            text = if (copied) "✓ Tersalin" else "Salin",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (copied) IncomeGreen else Muted,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
+        color = if (copied) IncomeGreen else Muted,
+        compact = true,
+    )
 }
 
 // -------------------------------------------------------------- sheet parts
@@ -317,9 +348,12 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
                 onDone = onClose,
             )
         }
-        TextButton(onClick = { confirmRemove = true }) {
-            Text("Hapus Target", color = MaterialTheme.colorScheme.error)
-        }
+        OutlinedActionButton(
+            text = "Hapus Target",
+            onClick = { confirmRemove = true },
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 
     if (confirmRemove) {
@@ -353,7 +387,10 @@ fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit)
 
     SheetColumn {
         SheetTitle("Tukar Uang")
-        SheetNote("Memindahkan uang antar dompet. Bukan pemasukan, bukan pengeluaran, tanpa catatan baru.")
+        SheetNote(
+            "Memindahkan uang antar dompet. Tercatat di Aktivitas sebagai transfer, " +
+                "tetapi tidak dihitung sebagai pemasukan atau pengeluaran.",
+        )
         MoneyField(label = "Nominal", digits = amount, onDigitsChange = { amount = it })
         PickerField(
             label = "Dari Dompet",
@@ -393,6 +430,40 @@ fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit)
             },
             onDismiss = { confirm = false },
         )
+    }
+}
+
+// ------------------------------------------------------------------- fee
+
+@Composable
+fun EditFeeSheet(vm: MainViewModel, current: Double, onClose: () -> Unit) {
+    var percent by rememberSaveable { mutableStateOf(Fmt.feePercentLabel(current)) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val value = Fmt.parseFee(percent)
+
+    SheetColumn {
+        SheetTitle("Biaya")
+        SheetNote(
+            "Biaya disimpan sebagai persentase dari pemasukan. Nilainya hanya informasi: " +
+                "tidak pernah dipotong dari saldo dompet.",
+        )
+        OutlinedTextField(
+            value = percent,
+            onValueChange = { percent = Fmt.sanitizeFeeInput(it) },
+            label = { Text("Biaya (%)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = "Contoh: pemasukan Rp 1.000.000 bulan ini → biaya ${Fmt.rp(Fmt.feeExpense(1_000_000, value))}.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+        )
+        FormError(error)
+        SaveButton("Simpan Biaya") {
+            vm.setFeePercent(value, onError = { error = it }, onDone = onClose)
+        }
     }
 }
 
@@ -496,9 +567,12 @@ fun DeleteWalletsSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> 
         }
         FormError(error)
         if (wallets.isNotEmpty()) {
-            TextButton(onClick = { pendingAll = true }) {
-                Text("Hapus Semua Dompet", color = MaterialTheme.colorScheme.error)
-            }
+            OutlinedActionButton(
+                text = "Hapus Semua Dompet",
+                onClick = { pendingAll = true },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 
@@ -552,9 +626,12 @@ fun DeleteTransactionsSheet(
         }
         FormError(error)
         if (transactions.isNotEmpty()) {
-            TextButton(onClick = { pendingAll = true }) {
-                Text("Hapus Semua Transaksi", color = MaterialTheme.colorScheme.error)
-            }
+            OutlinedActionButton(
+                text = "Hapus Semua Transaksi",
+                onClick = { pendingAll = true },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 
@@ -602,9 +679,12 @@ fun DeleteQuickActionsSheet(vm: MainViewModel, actions: List<QuickAction>, onClo
         }
         FormError(error)
         if (actions.isNotEmpty()) {
-            TextButton(onClick = { pendingAll = true }) {
-                Text("Hapus Semua Aksi Cepat", color = MaterialTheme.colorScheme.error)
-            }
+            OutlinedActionButton(
+                text = "Hapus Semua Aksi Cepat",
+                onClick = { pendingAll = true },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 
@@ -653,9 +733,12 @@ fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: 
         }
         FormError(error)
         if (snapshots.isNotEmpty()) {
-            TextButton(onClick = { pendingAll = true }) {
-                Text("Hapus Semua Snapshot", color = MaterialTheme.colorScheme.error)
-            }
+            OutlinedActionButton(
+                text = "Hapus Semua Snapshot",
+                onClick = { pendingAll = true },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 
@@ -681,5 +764,47 @@ fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: 
             },
             onDismiss = { pendingAll = false },
         )
+    }
+}
+
+// ---------------------------------------------------------- delete all data
+
+@Composable
+fun DeleteAllDataSheet(vm: MainViewModel, data: AppData, onClose: () -> Unit) {
+    var typed by rememberSaveable { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val confirmed = typed.trim().uppercase() == "HAPUS"
+
+    SheetColumn {
+        SheetTitle("Hapus semua data")
+        Text(
+            text = "Ini menghapus seluruh isi aplikasi, bukan hanya satu bagian. " +
+                "Backup yang sudah kamu ekspor tetap aman, tetapi tanpa backup data ini " +
+                "tidak bisa dikembalikan.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        SheetNote(
+            "${data.wallets.size} dompet · ${data.transactions.size} transaksi · " +
+                "${data.transfers.size} transfer · ${data.goals.size} target · " +
+                "${data.quickActions.size} aksi cepat · ${data.snapshots.size} snapshot",
+        )
+        LabeledTextField(
+            value = typed,
+            onValueChange = { typed = it.uppercase() },
+            label = "Ketik HAPUS untuk melanjutkan",
+        )
+        FormError(error)
+        Button(
+            onClick = { vm.deleteAllData(onError = { error = it }, onDone = onClose) },
+            enabled = confirmed,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = androidx.compose.ui.graphics.Color.White,
+            ),
+        ) {
+            Text("Hapus Semua Data")
+        }
     }
 }

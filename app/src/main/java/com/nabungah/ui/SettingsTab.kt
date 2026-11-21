@@ -2,6 +2,7 @@ package com.nabungah.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,11 +17,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nabungah.BuildConfig
 import com.nabungah.data.AppData
@@ -38,7 +45,7 @@ import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
 import com.nabungah.data.Wallet
 
-/** Settings: backup, wallet and quick-action setup, and all destructive tools. */
+/** Settings: data summary, backup, fee, setup, and all destructive tools. */
 @Composable
 fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     var backupMessage by remember { mutableStateOf<String?>(null) }
@@ -75,11 +82,24 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     ) {
         item {
             Column {
-                Text(
-                    text = "Pengaturan",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Pengaturan",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(SoftTeal)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
                 Text(
                     text = "Semua data tersimpan di perangkat ini.",
                     style = MaterialTheme.typography.bodySmall,
@@ -88,32 +108,69 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             }
         }
 
+        item { DataSummary(data) }
+
         item {
-            SectionCard(title = "Backup & pulihkan") {
+            SectionCard(title = "Backup & pemulihan") {
                 Text(
-                    text = "Ekspor semua data ke satu file JSON. Impor akan mengganti seluruh data di aplikasi.",
+                    text = "Ekspor seluruh data ke satu file JSON. Impor akan mengganti semua data " +
+                        "yang ada sekarang.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { exportLauncher.launch(Fmt.backupFileName(System.currentTimeMillis())) },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Ekspor") }
+                    Button(
+                        onClick = {
+                            exportLauncher.launch(Fmt.backupFileName(System.currentTimeMillis()))
+                        },
+                        modifier = Modifier.weight(1f).height(46.dp),
+                    ) { Text("Ekspor backup") }
                     OutlinedButton(
                         onClick = { confirmRestore = true },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(46.dp),
+                        border = BorderStroke(1.dp, CardBorder),
                     ) { Text("Impor") }
                 }
                 if (backupMessage != null) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         text = backupMessage!!,
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
                         color = if (backupFailed) MaterialTheme.colorScheme.error else IncomeGreen,
                     )
                 }
+            }
+        }
+
+        item {
+            SectionCard(
+                title = "Biaya",
+                actions = { CardAction("Ubah", { onSheet(Sheet.EditFee) }) },
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${Fmt.feePercentLabel(data.feePercent)}%",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = "dari pemasukan bulanan",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Hanya informasi yang perlu disisihkan; tidak pernah dipotong dari " +
+                        "saldo dompet. Nilai ini tersimpan dan dipakai di Beranda serta Laporan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
             }
         }
 
@@ -125,13 +182,17 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 if (data.wallets.isEmpty()) {
                     EmptyText("Belum ada dompet")
                 } else {
-                    data.wallets.forEach { wallet -> WalletRow(wallet) }
+                    data.wallets.forEachIndexed { index, wallet ->
+                        if (index > 0) RowDivider()
+                        WalletRow(wallet)
+                    }
                     Spacer(Modifier.height(10.dp))
-                    OutlinedButton(
+                    OutlinedActionButton(
+                        text = "Transfer antar dompet",
                         onClick = { onSheet(Sheet.Transfer) },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = data.wallets.size > 1,
-                    ) { Text("Transfer antar dompet") }
+                    )
                 }
             }
         }
@@ -141,15 +202,27 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 title = "Aksi cepat",
                 actions = { CardAction("+ Baru", { onSheet(Sheet.AddQuickAction) }) },
             ) {
+                Text(
+                    text = "Template judul, nominal, dan tipe untuk mengisi form transaksi " +
+                        "dengan satu ketukan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                Spacer(Modifier.height(6.dp))
                 if (data.quickActions.isEmpty()) {
                     EmptyText("Belum ada aksi cepat")
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        data.quickActions.forEach { action -> QuickActionRow(action) }
+                    data.quickActions.forEachIndexed { index, action ->
+                        if (index > 0) RowDivider()
+                        QuickActionRow(action)
                     }
-                    TextButton(onClick = { onSheet(Sheet.DeleteQuickActions) }) {
-                        Text("Hapus aksi cepat", color = MaterialTheme.colorScheme.error)
-                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedActionButton(
+                        text = "Hapus aksi cepat",
+                        onClick = { onSheet(Sheet.DeleteQuickActions) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
@@ -159,11 +232,19 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 title = "Target tabungan",
                 actions = { CardAction("+ Tambah", { onSheet(Sheet.AddGoal) }) },
             ) {
+                Text(
+                    text = "Progres target diisi manual dan terpisah dari saldo dompet. " +
+                        "Ketuk target untuk mengubahnya.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                Spacer(Modifier.height(6.dp))
                 if (data.goals.isEmpty()) {
                     EmptyText("Belum ada target")
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        data.goals.forEach { goal -> GoalRow(goal) { onSheet(Sheet.EditGoal(goal)) } }
+                    data.goals.forEachIndexed { index, goal ->
+                        if (index > 0) RowDivider()
+                        GoalRow(goal) { onSheet(Sheet.EditGoal(goal)) }
                     }
                 }
             }
@@ -176,13 +257,45 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 DangerAction("Hapus transaksi", data.transactions.size) {
                     onSheet(Sheet.DeleteTransactions)
                 }
+                Spacer(Modifier.height(8.dp))
                 DangerAction("Hapus dompet", data.wallets.size) { onSheet(Sheet.DeleteWallets) }
+                Spacer(Modifier.height(8.dp))
                 DangerAction("Hapus snapshot bulanan", data.snapshots.size) {
                     onSheet(Sheet.DeleteSnapshots)
+                }
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider(color = CardBorder)
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "Zona berbahaya",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { onSheet(Sheet.DeleteAllData) },
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.error),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start,
+                    ) {
+                        Text("Hapus semua data", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Dompet, transaksi, transfer, target, snapshot",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted,
+                        )
+                    }
                 }
             }
         }
@@ -196,8 +309,9 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Satu pengguna, sepenuhnya offline. Tanpa akun, akses jaringan, atau analitik. " +
-                        "Data tersimpan di SQLite lokal dan hanya keluar lewat backup yang kamu ekspor.",
+                    text = "Satu pengguna, sepenuhnya offline. Tanpa akun, akses jaringan, atau " +
+                        "analitik. Data tersimpan di SQLite lokal dan hanya keluar lewat backup " +
+                        "yang kamu ekspor.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -208,15 +322,75 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     if (confirmRestore) {
         ConfirmDialog(
             title = "Pulihkan backup?",
-            message = "Semua dompet, transaksi, aksi cepat, target, dan snapshot akan diganti isi file backup. Tidak bisa dibatalkan.",
+            message = "Semua dompet, transaksi, aksi cepat, target, snapshot, dan catatan " +
+                "transfer akan diganti isi file backup. Tidak bisa dibatalkan.",
             confirmLabel = "Pilih file",
             destructive = false,
             onConfirm = {
-                importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                importLauncher.launch(
+                    arrayOf("application/json", "text/plain", "application/octet-stream"),
+                )
             },
             onDismiss = { confirmRestore = false },
         )
     }
+}
+
+@Composable
+private fun DataSummary(data: AppData) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(HeroTop, HeroBottom)))
+            .padding(18.dp),
+    ) {
+        Text(
+            text = "Ringkasan data",
+            style = MaterialTheme.typography.labelMedium,
+            color = OnHeroMuted,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = Fmt.rp(data.totalBalance),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SummaryMetric("Dompet", data.wallets.size.toString(), Modifier.weight(1f))
+            SummaryMetric("Transaksi", data.transactions.size.toString(), Modifier.weight(1f))
+            SummaryMetric("Target", data.goals.size.toString(), Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun SummaryMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(Color(0x1AFFFFFF))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = OnHeroMuted)
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+        )
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    HorizontalDivider(
+        color = CardBorder,
+        modifier = Modifier.padding(vertical = 4.dp),
+    )
 }
 
 @Composable
@@ -226,7 +400,7 @@ private fun WalletRow(wallet: Wallet) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(30.dp).clip(CircleShape).background(SoftTeal),
+            modifier = Modifier.size(34.dp).clip(CircleShape).background(SoftTeal),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -237,11 +411,18 @@ private fun WalletRow(wallet: Wallet) {
             )
         }
         Spacer(Modifier.width(10.dp))
-        Text(
-            text = wallet.name,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = wallet.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = "Saldo saat ini",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
         Text(
             text = Fmt.rp(wallet.balance),
             style = MaterialTheme.typography.bodyMedium,
@@ -256,11 +437,18 @@ private fun QuickActionRow(action: QuickAction) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = action.title,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = action.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = if (action.type == "income") "Pemasukan" else "Pengeluaran",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
         Text(
             text = (if (action.type == "income") "+ " else "- ") + Fmt.rp(action.amount),
             style = MaterialTheme.typography.bodyMedium,
@@ -275,32 +463,46 @@ private fun GoalRow(goal: Goal, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+            .pressableCard(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onClick) {
-            Text(goal.title, color = MaterialTheme.colorScheme.onSurface)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = goal.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = "${Fmt.rp(goal.savedAmount)} dari ${Fmt.rp(goal.targetAmount)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
         }
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "${Fmt.rp(goal.savedAmount)} / ${Fmt.rp(goal.targetAmount)}",
-            style = MaterialTheme.typography.labelMedium,
-            color = Muted,
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = "Edit ${goal.title}",
+            tint = Muted,
         )
     }
 }
 
 @Composable
 private fun DangerAction(label: String, count: Int, onClick: () -> Unit) {
-    TextButton(
+    OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.fillMaxWidth().height(46.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.55f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error,
+        ),
     ) {
-        Text(label, modifier = Modifier.weight(1f))
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Start,
+        )
         Text("$count", color = Muted)
     }
 }
-
-/** Explicit white used by the sheet host; kept here so there is one card colour. */
-private val CardWhite = Color.White

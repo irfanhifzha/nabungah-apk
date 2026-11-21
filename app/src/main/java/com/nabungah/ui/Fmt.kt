@@ -76,6 +76,17 @@ object Fmt {
     fun monthKey(millis: Long): String =
         SimpleDateFormat("yyyy-MM", Locale.US).format(Date(millis))
 
+    /** "21/11" for compact month-copy lines. */
+    fun dayMonth(millis: Long): String =
+        SimpleDateFormat("dd/MM", Locale.US).format(Date(millis))
+
+    /** "21 November 2026" from a "yyyy-MM-dd" day key. */
+    fun dayLabelFromKey(key: String): String = runCatching {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(key)
+            ?: return@runCatching key
+        SimpleDateFormat("EEEE, d MMMM yyyy", ID).format(parsed)
+    }.getOrDefault(key)
+
     /** "21 Nov 2026" for transaction date groups. */
     fun dayLabel(millis: Long): String =
         SimpleDateFormat("d MMM yyyy", ID).format(Date(millis))

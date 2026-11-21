@@ -58,6 +58,8 @@ sealed interface Sheet {
     data object DeleteTransactions : Sheet
     data object DeleteQuickActions : Sheet
     data object DeleteSnapshots : Sheet
+    data object DeleteAllData : Sheet
+    data object EditFee : Sheet
 }
 
 private enum class Tab(val key: String, val label: String, val icon: ImageVector) {
@@ -185,6 +187,8 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
                 )
                 is Sheet.DeleteQuickActions -> DeleteQuickActionsSheet(vm, data.quickActions) { sheet = null }
                 is Sheet.DeleteSnapshots -> DeleteSnapshotsSheet(vm, data.snapshots) { sheet = null }
+                is Sheet.DeleteAllData -> DeleteAllDataSheet(vm, data) { sheet = null }
+                is Sheet.EditFee -> EditFeeSheet(vm, data.feePercent) { sheet = null }
             }
         }
     }

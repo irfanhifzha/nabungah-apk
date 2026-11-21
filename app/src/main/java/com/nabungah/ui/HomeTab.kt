@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,7 +44,7 @@ import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
 import kotlin.math.roundToInt
 
-/** Home: balance at a glance, quick entry, wallets, goals and the last few movements. */
+/** Home: balance, wallets, quick entry, goals and the last few movements. */
 @Composable
 fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
     val recent = data.transactions.take(5)
@@ -57,6 +56,13 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
     ) {
         item { GreetingHeader() }
         item { BalanceHero(data) }
+        item {
+            WalletsSection(
+                data = data,
+                onAdd = { onSheet(Sheet.AddWallet) },
+                onTransfer = { onSheet(Sheet.Transfer) },
+            )
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -86,14 +92,6 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
                     onAdd = { onSheet(Sheet.AddQuickAction) },
                 )
             }
-        }
-
-        item {
-            WalletsSection(
-                data = data,
-                onAdd = { onSheet(Sheet.AddWallet) },
-                onTransfer = { onSheet(Sheet.Transfer) },
-            )
         }
 
         item {
@@ -153,8 +151,8 @@ private fun GreetingHeader() {
 
 @Composable
 private fun BalanceHero(data: AppData) {
-    // Live preview: reuse the current month's saved fee if there is one, else the 2.5% default.
-    val feePercent = data.snapshots.firstOrNull { it.month == data.currentMonth }?.feePercent ?: 2.5
+    // Live preview from the fee saved in Settings; snapshots keep their own historical copy.
+    val feePercent = data.feePercent
     val fee = Fmt.feeExpense(data.monthIncome, feePercent)
     val afterFee = data.totalBalance - fee
     val afterFeeText = if (afterFee < 0) "- " + Fmt.rp(-afterFee) else Fmt.rp(afterFee)
@@ -284,6 +282,12 @@ private fun QuickActionsSection(
             title = "Aksi cepat",
             actions = { CardAction("+ Baru", onAdd) },
         )
+        Text(
+            text = "Template nominal tetap untuk mencatat transaksi harian tanpa mengetik ulang.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(actions, key = { it.id }) { action ->
                 QuickActionTile(action) { onUse(action) }
@@ -370,18 +374,12 @@ private fun WalletsSection(data: AppData, onAdd: () -> Unit, onTransfer: () -> U
             )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                data.wallets.chunked(2).forEach { rowWallets ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowWallets.forEach { wallet ->
-                            WalletCard(
-                                name = wallet.name,
-                                balance = wallet.balance,
-                                total = data.totalBalance,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        if (rowWallets.size == 1) Spacer(Modifier.weight(1f))
-                    }
+                data.wallets.forEach { wallet ->
+                    WalletCard(
+                        name = wallet.name,
+                        balance = wallet.balance,
+                        total = data.totalBalance,
+                    )
                 }
             }
         }
@@ -393,7 +391,6 @@ private fun WalletCard(
     name: String,
     balance: Long,
     total: Long,
-    modifier: Modifier = Modifier,
 ) {
     val rawShare = if (total <= 0) 0f else (balance.toFloat() / total).coerceIn(0f, 1f)
     val shareProgress by animateFloatAsState(
@@ -403,16 +400,15 @@ private fun WalletCard(
     )
     val share = (rawShare * 100).roundToInt()
     Column(
-        modifier = modifier
-            .aspectRatio(1f)
+        modifier = Modifier
+            .fillMaxWidth()
             .appCard()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(SoftTeal),
                 contentAlignment = Alignment.Center,
@@ -424,23 +420,22 @@ private fun WalletCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "$share%",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Muted,
-            )
-        }
-        Column {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "$share% dari total saldo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = Fmt.rp(balance),
                 style = MaterialTheme.typography.titleSmall,
@@ -448,23 +443,17 @@ private fun WalletCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { shareProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = CardBorder,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "dari total saldo",
-                style = MaterialTheme.typography.labelSmall,
-                color = Muted,
-            )
         }
+        Spacer(Modifier.height(10.dp))
+        LinearProgressIndicator(
+            progress = { shareProgress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp)),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = CardBorder,
+        )
     }
 }
 
@@ -476,6 +465,12 @@ private fun GoalsSection(goals: List<Goal>, onAdd: () -> Unit, onEdit: (Goal) ->
         SectionHeader(
             title = "Target tabungan",
             actions = { CardAction("+ Tambah", onAdd) },
+        )
+        Text(
+            text = "Catat progres menabung secara manual. Target tidak memotong saldo dompet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+            modifier = Modifier.padding(bottom = 2.dp),
         )
         if (goals.isEmpty()) {
             EmptyState(

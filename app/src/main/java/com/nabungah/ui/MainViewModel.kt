@@ -78,6 +78,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteAllWallets(onError: (String) -> Unit = {}) =
         write(onError) { it.deleteAllWallets() }
 
+    fun setFeePercent(percent: Double, onError: (String) -> Unit = {}, onDone: () -> Unit = {}) =
+        write(onError, onDone) { it.saveFeePercent(percent) }
+
+    fun deleteAllData(onError: (String) -> Unit = {}, onDone: () -> Unit = {}) =
+        write(onError, onDone) { it.deleteAllData() }
+
     fun addTransaction(
         title: String,
         amount: Long,

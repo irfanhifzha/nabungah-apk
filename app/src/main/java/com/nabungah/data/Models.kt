@@ -17,6 +17,16 @@ data class Trx(
     val month: String,
 )
 
+/** Activity-only record of a wallet-to-wallet move. Never counted as income or expense. */
+data class TransferLog(
+    val id: Long,
+    val amount: Long,
+    val fromWalletId: Long?,
+    val toWalletId: Long?,
+    val occurredAt: Long,
+    val month: String,
+)
+
 data class QuickAction(
     val id: Long,
     val title: String,
@@ -57,6 +67,9 @@ data class AppData(
     val quickActions: List<QuickAction> = emptyList(),
     val goals: List<Goal> = emptyList(),
     val snapshots: List<Snapshot> = emptyList(),
+    val transfers: List<TransferLog> = emptyList(),
+    /** Saved fee percentage used for live previews; snapshots keep their own copy. */
+    val feePercent: Double = 2.5,
     val currentMonth: String = "",
     val monthIncome: Long = 0,
     val monthExpense: Long = 0,

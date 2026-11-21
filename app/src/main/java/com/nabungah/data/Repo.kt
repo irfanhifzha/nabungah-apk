@@ -61,6 +61,25 @@ class Repo(context: Context) {
             }
         }
 
+        val transfers = db.query(
+            "transfer_log", null, null, null, null, null, "occurred_at DESC, id DESC"
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        TransferLog(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            amount = c.getLong(c.getColumnIndexOrThrow("amount")),
+                            fromWalletId = c.getLongOrNull("from_wallet_id"),
+                            toWalletId = c.getLongOrNull("to_wallet_id"),
+                            occurredAt = c.getLong(c.getColumnIndexOrThrow("occurred_at")),
+                            month = c.getString(c.getColumnIndexOrThrow("month")),
+                        )
+                    )
+                }
+            }
+        }
+
         val quickActions = db.query(
             "quick_action", null, null, null, null, null, "id ASC"
         ).use { c ->
@@ -124,6 +143,8 @@ class Repo(context: Context) {
             quickActions = quickActions,
             goals = goals,
             snapshots = snapshots,
+            transfers = transfers,
+            feePercent = feePercent(),
             currentMonth = month,
             monthIncome = sumForMonth(month, "income"),
             monthExpense = sumForMonth(month, "expense"),
@@ -352,9 +373,27 @@ class Repo(context: Context) {
         db.delete("goal", "id = ?", arrayOf(id.toString()))
     }
 
+    // ------------------------------------------------------------------- fee
+
+    /** Fee percentage saved by the user; used for live previews and new snapshots. */
+    fun feePercent(): Double = appContext
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getFloat(KEY_FEE_PERCENT, DEFAULT_FEE_PERCENT.toFloat())
+        .toDouble()
+
+    fun saveFeePercent(percent: Double) {
+        if (percent < 0 || percent > 100) {
+            throw ValidationException("Biaya harus antara 0 dan 100 persen")
+        }
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_FEE_PERCENT, percent.toFloat())
+            .apply()
+    }
+
     // ------------------------------------------------------------ transfers
 
-    /** Moves money between wallets atomically. Creates no record by design. */
+    /** Moves money between wallets atomically and appends an activity-log entry. */
     fun transfer(amount: Long, fromId: Long?, toId: Long?) {
         if (amount <= 1000) throw ValidationException("Nominal harus lebih dari 1.000")
         if (fromId == null || toId == null) throw ValidationException("Pilih kedua dompet")
@@ -368,6 +407,34 @@ class Repo(context: Context) {
             val now = System.currentTimeMillis()
             updateBalance(fromId, from - amount, now)
             updateBalance(toId, to + amount, now)
+            db.insertOrThrow(
+                "transfer_log", null,
+                ContentValues().apply {
+                    put("amount", amount)
+                    put("from_wallet_id", fromId)
+                    put("to_wallet_id", toId)
+                    put("occurred_at", now)
+                    put("month", Fmt.monthKey(now))
+                },
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    // --------------------------------------------------------- destructive
+
+    /** Wipes wallets, transactions, quick actions, goals, snapshots and transfer logs. */
+    fun deleteAllData() {
+        db.beginTransaction()
+        try {
+            db.delete("transfer_log", null, null)
+            db.delete("trx", null, null)
+            db.delete("wallet", null, null)
+            db.delete("quick_action", null, null)
+            db.delete("goal", null, null)
+            db.delete("month_snapshot", null, null)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -470,6 +537,23 @@ class Repo(context: Context) {
         }
         root.put("snapshots", snapshots)
 
+        val transfers = JSONArray()
+        db.query("transfer_log", null, null, null, null, null, "id ASC").use { c ->
+            while (c.moveToNext()) {
+                val item = JSONObject()
+                    .put("id", c.longOf("id"))
+                    .put("amount", c.longOf("amount"))
+                    .put("occurred_at", c.longOf("occurred_at"))
+                    .put("month", c.stringOf("month"))
+                listOf("from_wallet_id", "to_wallet_id").forEach { column ->
+                    val idx = c.getColumnIndexOrThrow(column)
+                    item.put(column, if (c.isNull(idx)) JSONObject.NULL else c.getLong(idx))
+                }
+                transfers.put(item)
+            }
+        }
+        root.put("transfers", transfers)
+
         return root.toString(2)
     }
 
@@ -497,6 +581,7 @@ class Repo(context: Context) {
         val quickActionRows = mutableListOf<ContentValues>()
         val goalRows = mutableListOf<ContentValues>()
         val snapshotRows = mutableListOf<ContentValues>()
+        val transferRows = mutableListOf<ContentValues>()
 
         try {
             val wallets = root.optJSONArray("wallets") ?: JSONArray()
@@ -562,6 +647,22 @@ class Repo(context: Context) {
                 )
             }
 
+            val transfers = root.optJSONArray("transfers") ?: JSONArray()
+            for (i in 0 until transfers.length()) {
+                val o = transfers.getJSONObject(i)
+                transferRows.add(
+                    ContentValues().apply {
+                        put("id", o.getLong("id"))
+                        put("amount", o.getLong("amount"))
+                        put("occurred_at", o.getLong("occurred_at"))
+                        put("month", o.getString("month"))
+                        listOf("from_wallet_id", "to_wallet_id").forEach { column ->
+                            if (o.isNull(column)) putNull(column) else put(column, o.getLong(column))
+                        }
+                    },
+                )
+            }
+
             val snapshots = root.optJSONArray("snapshots") ?: JSONArray()
             for (i in 0 until snapshots.length()) {
                 val o = snapshots.getJSONObject(i)
@@ -589,6 +690,7 @@ class Repo(context: Context) {
 
         db.beginTransaction()
         try {
+            db.delete("transfer_log", null, null)
             db.delete("trx", null, null)
             db.delete("wallet", null, null)
             db.delete("quick_action", null, null)
@@ -596,6 +698,7 @@ class Repo(context: Context) {
             db.delete("month_snapshot", null, null)
             walletRows.forEach { db.insertOrThrow("wallet", null, it) }
             trxRows.forEach { db.insertOrThrow("trx", null, it) }
+            transferRows.forEach { db.insertOrThrow("transfer_log", null, it) }
             quickActionRows.forEach { db.insertOrThrow("quick_action", null, it) }
             goalRows.forEach { db.insertOrThrow("goal", null, it) }
             snapshotRows.forEach { db.insertOrThrow("month_snapshot", null, it) }
@@ -612,9 +715,10 @@ class Repo(context: Context) {
 
     companion object {
         private const val BACKUP_APP = "nabungah"
-        private const val BACKUP_VERSION = 2
+        private const val BACKUP_VERSION = 3
         private const val PREFS_NAME = "nabungah_sync"
         private const val KEY_LAST_AUTO_MONTH = "last_auto_month"
+        private const val KEY_FEE_PERCENT = "fee_percent"
         private const val DEFAULT_FEE_PERCENT = 2.5
     }
 
@@ -709,6 +813,7 @@ class Repo(context: Context) {
             }
         }.associateBy { it.month }
 
+        val globalFee = feePercent()
         var changed = false
         db.beginTransaction()
         try {
@@ -716,7 +821,7 @@ class Repo(context: Context) {
                 if (!backfill && !force && month <= lastMonth) continue
                 val saved = existing[month]
                 if (saved != null && saved.source == Snapshot.SOURCE_MANUAL) continue
-                val feePercent = saved?.feePercent ?: DEFAULT_FEE_PERCENT
+                val feePercent = saved?.feePercent ?: globalFee
                 upsertSnapshot(
                     month = month,
                     totalBalance = totalBalance - (netAfter[month] ?: 0L),
@@ -771,17 +876,17 @@ class Repo(context: Context) {
                 "FROM trx WHERE month > ?",
             arrayOf(key),
         ).use { if (it.moveToFirst()) it.getLong(0) else 0L }
-        val feePercent = db.rawQuery(
+        val storedFee = db.rawQuery(
             "SELECT fee_percent FROM month_snapshot WHERE month = ?", arrayOf(key),
-        ).use { if (it.moveToFirst()) it.getDouble(0) else DEFAULT_FEE_PERCENT }
+        ).use { if (it.moveToFirst()) it.getDouble(0) else feePercent() }
 
         upsertSnapshot(
             month = key,
             totalBalance = totalBalance - netAfter,
             totalIncome = income,
             totalExpense = expense,
-            feePercent = feePercent,
-            feeExpense = Fmt.feeExpense(income, feePercent),
+            feePercent = storedFee,
+            feeExpense = Fmt.feeExpense(income, storedFee),
             source = Snapshot.SOURCE_AUTO,
         )
     }

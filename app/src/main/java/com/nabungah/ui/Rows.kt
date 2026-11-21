@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.Snapshot
+import com.nabungah.data.TransferLog
 import com.nabungah.data.Trx
 
 /** Label on the left, right-aligned amount. Shared by cards and snapshot rows. */
@@ -112,6 +113,64 @@ fun TransactionRow(trx: Trx, walletName: String) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             CopyButton(text = trxCopyText(trx, walletName))
         }
+    }
+}
+
+/** Activity-only transfer entry: informational, never an income or expense row. */
+@Composable
+fun TransferRow(transfer: TransferLog, walletNames: Map<Long, String>) {
+    val from = walletNames[transfer.fromWalletId] ?: "Dompet dihapus"
+    val to = walletNames[transfer.toWalletId] ?: "Dompet dihapus"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .appCard()
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(end = 10.dp)
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(SoftTeal),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "⇄",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "Transfer",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "$from → $to",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+            Text(
+                text = Fmt.timestamp(transfer.occurredAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
+        Text(
+            text = Fmt.rp(transfer.amount),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 10.dp),
+            maxLines = 1,
+        )
     }
 }
 

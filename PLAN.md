@@ -35,9 +35,6 @@ INI RENCANA UNTUK VERSI `1.3`.
   `NABUNGAH_KEYSTORE_BASE64`, `NABUNGAH_KEYSTORE_PASSWORD`, `NABUNGAH_KEY_ALIAS`,
   `NABUNGAH_KEY_PASSWORD`; tanpa secret, APK jatuh ke debug-sign.
 - [x] Versi **1.3** (`versionCode` 3), unit test lulus, APK release dibangun.
-
-## Berikutnya
-
 - [x] Secrets keystore sudah diisi di repo (`NABUNGAH_KEYSTORE_BASE64`, `..._PASSWORD`,
   `..._ALIAS`, `..._KEY_PASSWORD`). Keystore asli ada di `nabungah-release.jks` +
   `keystore.properties` (keduanya di-gitignore) — simpan cadangannya, tanpa itu update APK
@@ -52,11 +49,6 @@ INI RENCANA UNTUK VERSI `1.3`.
   `upload-artifact@v7`, `action-gh-release@v3` (semua runtime Node 24). Diuji lewat
   `workflow_dispatch` (run 44884200897, hijau 2m39s) tanpa membuat tag atau release baru;
   langkah Publish dilewati sesuai desain.
-- [ ] Putuskan apakah tiga perubahan pasca-tag (saldo di Laporan, padding nominal, kartu dompet
-  persegi) dirilis sebagai 1.3.1 — tag `v1.3` sudah terbit dan tidak menyertakan perubahan ini.
-- [ ] Pertimbangkan naik Gradle 8.14.3 ke versi terbaru; Actions memberi peringatan EOL, tapi
-  build dan rilis masih hijau.
-- [ ] ...
 - [x] Tag `v1.3` sudah dipush. Workflow rilis hijau (3m12s): unit test, build, upload
   artifact, dan GitHub Release terbit di https://github.com/irfanhifzha/nabungah-apk/releases/tag/v1.3
   berisi `nabungah-release.apk` (1,3 MB) yang sudah diverifikasi bertanda tangan
@@ -64,4 +56,35 @@ INI RENCANA UNTUK VERSI `1.3`.
 - [x] `keystore.properties` dipakai sebagai fallback signing lokal, jadi `assembleRelease` di
   mesin ini otomatis memakai keystore rilis tanpa env var. Gradle daemon tidak lagi jadi
   jebakan; build CI tetap memakai env dari secrets.
-- [ ] ..
+- [x] Semua tombol sekunder/hapus memakai outline lewat `OutlinedActionButton`; aksi hapus
+  memakai border merah dan selebar kartu. Tombol isi hanya untuk aksi utama (simpan/ekspor).
+- [x] "Hapus semua data" ditambahkan di Data & reset: menghapus enam tabel dalam satu transaksi,
+  dengan ringkasan jumlah data dan konfirmasi wajib mengetik `HAPUS`.
+- [x] Copy diperbarui jadi blok polos tanpa emoji (judul `*Nabungah — …*`). Laporan punya tombol
+  Salin yang menyalin ringkasan bulan + satu baris ringkas per transaksi (`dd/MM judul — nominal · dompet`).
+- [x] Halaman Pengaturan dirapikan: kartu ringkasan saldo/jumlah data, pemisah baris, tombol
+  ekspor/impor yang jelas, kartu biaya, target dengan chevron, dan zona berbahaya terpisah.
+- [x] Biaya menjadi setelan global tersimpan (SharedPreferences `fee_percent`, default 2,5%), bisa
+  diubah dari Pengaturan atau kartu Biaya di Laporan. Tidak ada lagi input live di Laporan; snapshot
+  lama tetap menyimpan persentase historisnya.
+- [x] Transfer kini dicatat di tabel `transfer_log` (skema v3, backup v3) dan tampil di Aktivitas
+  dengan filter Tipe → Transfer. Log ini tidak pernah masuk pemasukan/pengeluaran, Laporan, Home,
+  atau snapshot; transaksi tetap satu-satunya sumber angka.
+- [x] Markdown terkait (README, GUIDE, PLAN) diselaraskan dengan biaya tersimpan, transfer
+  log, saldo, copy baru, dan petunjuk build Windows `cmd`.
+- [x] Build lokal pasca-perubahan: 14 unit test lulus, `assembleDebug` dan `assembleRelease`
+  sukses. APK rilis 1.308.162 byte, bertanda tangan `CN=Nabungah` (keystore rilis lokal).
+  Belum ada commit, push, atau tag.
+- [x] Kartu Dompet dipindah ke Home tepat di bawah Total Saldo; bentuknya kini kartu lebar
+  (bukan persegi) dengan avatar, nama, persen porsi, nominal, dan progress bar.
+- [x] Teks penjelasan ditambahkan di bagian Aksi cepat dan Target tabungan (Home dan
+  Pengaturan): template transaksi, progres manual, dan target tidak memotong saldo dompet.
+- [x] Aktivitas punya tampilan Kalender: grid Senin–Minggu, navigasi bulan, titik hijau/merah/teal
+  untuk pemasukan/pengeluaran/transfer, tap tanggal untuk daftar aktivitas hari itu, plus filter tipe.
+- [x] Laporan mendapat dashboard statistik: 6 tile (pemasukan, pengeluaran, selisih, rata-rata,
+  jumlah transaksi, biaya), tren persen vs bulan sebelumnya, saldo akhir bulan, dan pengeluaran terbesar.
+- [ ] ...
+
+nanti lagi..
+- [ ] lanjutkan todo.md
+- [ ] ...

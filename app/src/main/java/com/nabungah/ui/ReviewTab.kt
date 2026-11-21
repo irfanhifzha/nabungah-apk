@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.AppData
 import com.nabungah.data.Snapshot
+import kotlin.math.roundToInt
 
 /**
  * Monthly report: every figure comes from that month's transactions, so the selected month is
@@ -57,7 +58,6 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             .sortedDescending()
     }
     var month by rememberSaveable { mutableStateOf(data.currentMonth) }
-    var fee by rememberSaveable { mutableStateOf("2,5") }
     var message by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(months) {
@@ -68,13 +68,10 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     }
 
     val snapshot = data.snapshots.firstOrNull { it.month == month }
-    // A saved month remembers its fee; everything else starts from the 2.5% default.
-    LaunchedEffect(month, snapshot?.feePercent) {
-        fee = snapshot?.let { Fmt.feePercentLabel(it.feePercent) } ?: "2,5"
-    }
     LaunchedEffect(month) { message = null }
 
-    val feePercent = Fmt.parseFee(fee)
+    // The live fee comes from the saved setting, never from a per-screen draft.
+    val feePercent = data.feePercent
     val report = remember(data.transactions, data.totalBalance, month, feePercent) {
         buildMonthReport(month, data.transactions, data.totalBalance, feePercent)
     }
@@ -82,16 +79,21 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     val isCurrentMonth = month == data.currentMonth
     val isManual = snapshot?.isManual == true
     val isAuto = snapshot?.source == Snapshot.SOURCE_AUTO
+    // Saved fee percentages are historical and deliberately not compared with the live setting.
     val differs = snapshot != null && (
         snapshot.totalIncome != report.income ||
             snapshot.totalExpense != report.expense ||
-            snapshot.totalBalance != report.balance ||
-            kotlin.math.abs(snapshot.feePercent - report.feePercent) > 0.0001
+            snapshot.totalBalance != report.balance
         )
 
     val index = months.indexOf(month)
     val older = months.getOrNull(index + 1)
     val newer = if (index > 0) months[index - 1] else null
+    val previousReport = older?.let { previous ->
+        buildMonthReport(previous, data.transactions, data.totalBalance, feePercent)
+    }
+    val incomeTrend = previousReport?.let { changeLabel(report.income, it.income) }
+    val expenseTrend = previousReport?.let { changeLabel(report.expense, it.expense) }
 
     fun resetToAuto() {
         vm.resetSnapshotToAuto(
@@ -155,8 +157,21 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
-            SectionCard(title = "Laporan bulan ini") {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionCard(
+                title = "Statistik ${Fmt.monthLabel(month)}",
+                actions = {
+                    CopyButton(
+                        text = monthCopyText(month, report, data.transactions, data.walletNames),
+                    )
+                },
+            ) {
+                Text(
+                    text = "Ringkasan cepat bulan ini, dihitung langsung dari transaksimu.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatTile(
                         label = "Pemasukan",
                         value = "+ " + Fmt.rp(report.income),
@@ -170,20 +185,52 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                         modifier = Modifier.weight(1f),
                     )
                 }
-                Spacer(Modifier.height(10.dp))
-                AmountRow("Selisih", report.net, if (report.net >= 0) IncomeGreen else ExpenseRed)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatTile(
+                        label = "Selisih",
+                        value = signedRp(report.net),
+                        color = if (report.net >= 0) IncomeGreen else ExpenseRed,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatTile(
+                        label = "Rata-rata pengeluaran",
+                        value = Fmt.rp(report.averageExpense),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatTile(
+                        label = "Transaksi",
+                        value = report.count.toString(),
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatTile(
+                        label = "Biaya ${Fmt.feePercentLabel(report.feePercent)}%",
+                        value = Fmt.rp(report.feeExpense),
+                        color = StatusOrange,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (incomeTrend != null || expenseTrend != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = listOfNotNull(
+                            incomeTrend?.let { "Pemasukan $it" },
+                            expenseTrend?.let { "Pengeluaran $it" },
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Muted,
+                    )
+                }
+                HorizontalDivider(
+                    color = CardBorder,
+                    modifier = Modifier.padding(vertical = 10.dp),
+                )
                 AmountRow("Saldo akhir bulan", report.balance, MaterialTheme.colorScheme.onSurface)
-                AmountRow(
-                    "Transaksi",
-                    report.count.toLong(),
-                    MaterialTheme.colorScheme.onSurface,
-                    money = false,
-                )
-                AmountRow(
-                    "Rata-rata pengeluaran",
-                    report.averageExpense,
-                    MaterialTheme.colorScheme.onSurface,
-                )
                 if (report.topExpenses.isNotEmpty()) {
                     HorizontalDivider(
                         color = CardBorder,
@@ -233,41 +280,37 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
-            SectionCard(title = "Biaya bulan ini") {
+            SectionCard(
+                title = "Biaya bulan ini",
+                actions = { CardAction("Ubah", { onSheet(Sheet.EditFee) }) },
+            ) {
                 Text(
                     text = "Hanya informasi. Biaya adalah bagian pemasukan bulan ini yang perlu " +
-                        "disisihkan; tidak pernah dipotong dari dompet.",
+                        "disisihkan; tidak pernah dipotong dari dompet. Persentasenya disimpan " +
+                        "dan bisa diubah kapan saja.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = fee,
-                        onValueChange = { fee = Fmt.sanitizeFeeInput(it) },
-                        label = { Text("Biaya %") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.width(130.dp),
-                    )
-                    Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Biaya dari pemasukan",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Muted,
-                        )
-                        Text(
-                            text = Fmt.rp(report.feeExpense),
+                            text = "Biaya ${Fmt.feePercentLabel(report.feePercent)}%",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "${Fmt.feePercentLabel(report.feePercent)}% dari ${Fmt.rp(report.income)}",
+                            text = "dari pemasukan ${Fmt.rp(report.income)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Muted,
                         )
                     }
+                    Text(
+                        text = Fmt.rp(report.feeExpense),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(color = CardBorder)
@@ -329,14 +372,18 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 }
 
                 if (isManual) {
-                    TextButton(onClick = { resetToAuto() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Kembalikan ke otomatis")
-                    }
+                    OutlinedActionButton(
+                        text = "Kembalikan ke otomatis",
+                        onClick = { resetToAuto() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 if (isAuto && differs) {
-                    TextButton(onClick = { resetToAuto() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Perbarui laporan otomatis")
-                    }
+                    OutlinedActionButton(
+                        text = "Perbarui laporan otomatis",
+                        onClick = { resetToAuto() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 if (isAuto && differs) {
                     Text(
@@ -434,4 +481,15 @@ private fun StatusChip(label: String, color: Color) {
             .background(color.copy(alpha = 0.12f))
             .padding(horizontal = 8.dp, vertical = 3.dp),
     )
+}
+
+private fun signedRp(value: Long): String =
+    if (value < 0) "- " + Fmt.rp(-value) else "+ " + Fmt.rp(value)
+
+/** Rounded month-over-month change, or null when the previous month has no base. */
+private fun changeLabel(current: Long, previous: Long): String? {
+    if (previous <= 0) return null
+    if (current == previous) return "sama vs bulan lalu"
+    val percent = ((current - previous) * 100.0 / previous).roundToInt()
+    return (if (percent > 0) "+$percent%" else "$percent%") + " vs bulan lalu"
 }

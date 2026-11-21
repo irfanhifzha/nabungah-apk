@@ -19,8 +19,8 @@ Nabungah ("nabung" = saving) is a personal money tracker. You record **where you
 
 The same content, split across tabs (the order inside each tab still matters):
 
-**Home** — total balance hero with this month's income/expense, quick entry, Quick Actions,
-Wallets, Nabung (savings goals), then the five most recent transactions with a link to Activity.
+**Home** — total balance hero with this month's income/expense, Wallets, quick entry, Quick
+Actions, Nabung (savings goals), then the five most recent transactions with a link to Activity.
 
 **Activity** — searchable, filterable transaction log grouped by day, newest first.
 
@@ -42,7 +42,7 @@ This split is the product's structure; keep it.
 | **Transaction** | One movement of money into or out of one wallet. `income` or `expense`. Also carries the *title* and an optional note. |
 | **Quick Action** | A saved transaction template (title + amount + type). Fills the transaction form in one tap. Never moves money itself. |
 | **Goal** | A savings target with a saved amount and status. **Not linked to any wallet.** |
-| **Transfer ("Tukar Uang")** | Moves a balance between two wallets without income/expense semantics. Creates **no** record. |
+| **Transfer ("Tukar Uang")** | Moves a balance between two wallets without income/expense semantics. Creates an activity-log entry only, never a transaction. |
 | **Monthly snapshot** | A stored copy of that month's totals. Saved manually. |
 | **Fee %** | A notional percentage of income, stored per snapshot. Never deducted from anything. |
 
@@ -131,17 +131,19 @@ On save, **atomically** do both:
 Each row shows: title, formatted timestamp, wallet name, note (only if present), and the signed amount: `+ Rp …` green for income, `- Rp …` red for expense.
 
 ### Copy to clipboard
-Per-row button copies this exact WhatsApp-style block (blank line handling as shown):
+Per-row button copies this exact plain-text block (no emoji, blank line handling as shown):
 
 ```
-*🧾 Transaksi: {title}*
-💰 Nominal: Rp {amount}
-📌 Tipe: {Pemasukan|Pengeluaran}
-🏦 Dompet: {wallet name}
-🗓️ Tanggal: {weekday short}, {dd}/{MM}/{yyyy}, {HH}:{mm}
-📝 Catatan: {note or "-"}
+*Nabungah — Transaksi*
+{title}
+Rp {amount} · {Pemasukan|Pengeluaran}
+Dompet: {wallet name}
+Tanggal: {weekday short}, {dd}/{MM}/{yyyy}, {HH}:{mm}
+Catatan: {note or "-"}
 ```
 
+- The month report also has a compact copy action: summary lines followed by one line per
+transaction (`dd/MM {title} — ± Rp {amount} · {wallet}`).
 - The button shows a checkmark for ~1.5 s after copying.
 - No file export, no CSV, no sharing intent is required by the original — plain clipboard text.
 
@@ -216,8 +218,8 @@ Validation, in order:
 On save: subtract from source, add to destination, both `updated_at = now`, **in one database transaction**.
 
 Consequences to preserve:
-- **No record is created.** Transfers do not appear in the transaction list, Monthly Overview, or any history. They only change wallet balances and therefore Total Balance stays the same.
-- Because no record is created, the rebuild must not imply otherwise in the UI. If transfer history is added later, it must be a new, separate table and must not feed income/expense totals.
+- Transfers are logged in a **separate `transfer_log` table** shown in Activity with its own `Transfer` filter. The log must never feed income/expense totals, reports, or snapshots; Review and Home continue to read only `trx`.
+- They only change wallet balances, so Total Balance stays the same.
 
 ---
 
@@ -237,7 +239,7 @@ Shows:
   Transfers and goals never change the total, so this reconstruction is exact unless a wallet was
   deleted (which removes balance without a transaction).
 - **Average expense** and the top three expense titles for the month.
-- **Fee %** — editable, default **2.5** (a saved month reopens with its own fee).
+- **Fee %** — a saved global setting, default **2.5**, editable from Settings or the Review fee card.
 - **Fee Expense** = `round(Total Income × Fee % / 100)`; purely informational, not deducted anywhere.
 - **Status** — `Running month` (current month, never auto-saved), `Automatic` (maintained by the app),
   `Manual` (frozen by the user), or `Not saved`.
@@ -249,8 +251,9 @@ Shows:
 Rebuild notes:
 - Recompute from the database on any data change; these are derived values, never stored — except
   the snapshot itself.
-- The fee percentage is a **draft** in the Review tab until saved into a snapshot. Do not persist it
-  as a global setting unless you explicitly decide to (the original resets to 2.5 on reload).
+- The fee percentage is **persisted globally** (SharedPreferences) and is no longer a per-screen
+  draft. Snapshots keep their own historical fee copy; changing the global value never rewrites
+  saved months.
 - Accept decimal fee input (e.g. `2,5`). The original stripped the decimal character, making 2.5
   untypeable — fix it.
 
@@ -264,8 +267,8 @@ edited by hand.
 ### Automatic rollover
 - The first time the app opens in a new calendar month it writes snapshots for every finished month
   since the last sync (all finished months on a fresh install or an upgrade from 1.1).
-- Values come from transactions: income, expense, the reconstructed month-end balance and a 2.5% fee
-  (or the fee already stored for that month).
+- Values come from transactions: income, expense, the reconstructed month-end balance and the
+  saved global fee (or the fee already stored for that month).
 - Existing `manual` snapshots are **never** overwritten.
 - An `auto` snapshot of a month whose transactions no longer exist is removed.
 - A deleted auto snapshot is not recreated on the next month change unless the app has not yet seen
@@ -292,13 +295,13 @@ edited by hand.
 - **Copy to clipboard** per row, exact block:
 
 ```
-*📅 Statistik Bulan: {month}*
-🔁 Sumber: {Manual|Otomatis}
-💰 Total Pemasukan: Rp {totalIncome}
-💸 Total Pengeluaran: Rp {totalExpense}
-💼 Total Saldo: Rp {totalBalance}
-💳 Biaya ({feePercent}%): Rp {feeExpense}
-🕒 Diperbarui: {updatedAt}
+*Nabungah — {Month YYYY}*
+Sumber: {Manual|Otomatis}
+Pemasukan: Rp {totalIncome}
+Pengeluaran: Rp {totalExpense}
+Saldo: Rp {totalBalance}
+Biaya ({feePercent}%): Rp {feeExpense}
+Diperbarui: {updatedAt}
 ```
 (Checkmark feedback ~1.5 s, as with transactions.)
 
@@ -409,7 +412,7 @@ These are real inconsistencies in the original. Each needs an explicit decision 
 4. **Wallet delete orphans history** ("Unknown Wallet"). Keep orphan rendering, and choose `SET NULL`/soft delete instead of cascade.
 5. **Monthly Overview ignores the transaction month filter.** It is always *this* month. Keep or expose a month selector — but if you add one, the "current month" default must stay.
 6. **Filter defaults to "All Months"** even though the older README claimed current month. Spec says All Months.
-7. **No transfer history.** Transfers are invisible after the fact. If you add history, keep it separate from income/expense.
+7. **Transfer history is informational only.** Activity reads the separate `transfer_log`; never let it feed income/expense totals, reports, or snapshots.
 8. **Goal ↔ wallet are decoupled by design.** Don't auto-connect.
 
 ---
@@ -420,7 +423,7 @@ These are real inconsistencies in the original. Each needs an explicit decision 
 - [ ] Wallet: add with starting balance; sum equals Total Balance; delete warns and leaves history readable as `Unknown Wallet`.
 - [ ] Transaction: expense blocked when it would make a wallet negative; wallet balance and list update together or not at all.
 - [ ] Transaction filters: month options derived from data; type; limit truncates but "X of Y" uses the unfiltered-by-limit count.
-- [ ] Copy block for a transaction matches §4 exactly, including emoji and `id-ID` formatting.
+- [ ] Copy block for a transaction matches §4 exactly (plain `*Nabungah — Transaksi*` header, no emoji) and `id-ID` formatting.
 - [ ] Quick Action tap pre-fills the form and does not modify the action.
 - [ ] Goal: create at 0 progress, edit saved/target/status, progress capped at 100%, remove confirmed, wallets untouched.
 - [ ] Tukar Uang: rejects ≤ 1.000, rejects same wallet, checks DB balance, moves money atomically, creates no transaction, Total Balance unchanged.

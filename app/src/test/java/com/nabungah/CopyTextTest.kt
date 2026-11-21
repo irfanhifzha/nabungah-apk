@@ -2,6 +2,8 @@ package com.nabungah
 
 import com.nabungah.data.Snapshot
 import com.nabungah.data.Trx
+import com.nabungah.ui.buildMonthReport
+import com.nabungah.ui.monthCopyText
 import com.nabungah.ui.snapshotCopyText
 import com.nabungah.ui.trxCopyText
 import org.junit.After
@@ -34,55 +36,68 @@ class CopyTextTest {
         return cal.timeInMillis
     }
 
+    private fun trx(
+        id: Long,
+        title: String,
+        amount: Long,
+        type: String,
+        note: String,
+        at: Long,
+    ) = Trx(
+        id = id,
+        title = title,
+        amount = amount,
+        type = type,
+        walletId = 1L,
+        note = note,
+        occurredAt = at,
+        month = "2026-11",
+    )
+
     @Test
-    fun transactionCopyBlockMatchesSpec() {
-        val trx = Trx(
+    fun transactionCopyBlockIsSimpleAndComplete() {
+        val kopi = trx(
             id = 1,
             title = "Kopi",
             amount = 20_000,
             type = "expense",
-            walletId = 2,
             note = "pagi",
-            occurredAt = millis(2026, Calendar.NOVEMBER, 21, 14, 5),
-            month = "2026-11",
+            at = millis(2026, Calendar.NOVEMBER, 21, 14, 5),
         )
         val expected = """
-            *🧾 Transaksi: Kopi*
-            💰 Nominal: Rp 20.000
-            📌 Tipe: Pengeluaran
-            🏦 Dompet: Cash
-            🗓️ Tanggal: Sab, 21/11/2026, 14:05
-            📝 Catatan: pagi
+            *Nabungah — Transaksi*
+            Kopi
+            Rp 20.000 · Pengeluaran
+            Dompet: Cash
+            Tanggal: Sab, 21/11/2026, 14:05
+            Catatan: pagi
         """.trimIndent()
-        assertEquals(expected, trxCopyText(trx, "Cash"))
+        assertEquals(expected, trxCopyText(kopi, "Cash"))
     }
 
     @Test
     fun transactionCopyBlockUsesDashForEmptyNote() {
-        val trx = Trx(
-            id = 1,
+        val gaji = trx(
+            id = 2,
             title = "Gaji",
             amount = 1_500_000,
             type = "income",
-            walletId = null,
             note = "",
-            occurredAt = millis(2026, Calendar.NOVEMBER, 2, 8, 30),
-            month = "2026-11",
+            at = millis(2026, Calendar.NOVEMBER, 2, 8, 30),
         )
-        val block = trxCopyText(trx, "Dompet tidak dikenal")
         assertEquals(
-            "*🧾 Transaksi: Gaji*\n" +
-                "💰 Nominal: Rp 1.500.000\n" +
-                "📌 Tipe: Pemasukan\n" +
-                "🏦 Dompet: Dompet tidak dikenal\n" +
-                "🗓️ Tanggal: Sen, 02/11/2026, 08:30\n" +
-                "📝 Catatan: -",
-            block,
+            "*Nabungah — Transaksi*\n" +
+                "Gaji\n" +
+                "Rp 1.500.000 · Pemasukan\n" +
+                "Dompet: Dompet tidak dikenal\n" +
+                "Tanggal: Sen, 02/11/2026, 08:30\n" +
+                "Catatan: -",
+            trxCopyText(gaji, "Dompet tidak dikenal"),
         )
     }
 
     @Test
-    fun snapshotCopyBlockMatchesSpec() {
+    fun snapshotCopyBlockIsSimpleAndComplete() {
         val snapshot = Snapshot(
             month = "2026-11",
             totalBalance = 130_000,
@@ -93,14 +108,50 @@ class CopyTextTest {
             updatedAt = millis(2026, Calendar.NOVEMBER, 21, 11, 42),
         )
         val expected = """
-            *📅 Statistik Bulan: 2026-11*
-            🔁 Sumber: Manual
-            💰 Total Pemasukan: Rp 1.500.000
-            💸 Total Pengeluaran: Rp 20.000
-            💼 Total Saldo: Rp 130.000
-            💳 Biaya (2,5%): Rp 37.500
-            🕒 Diperbarui: Sab, 21/11/2026, 11:42
+            *Nabungah — November 2026*
+            Sumber: Manual
+            Pemasukan: Rp 1.500.000
+            Pengeluaran: Rp 20.000
+            Saldo: Rp 130.000
+            Biaya (2,5%): Rp 37.500
+            Diperbarui: Sab, 21/11/2026, 11:42
         """.trimIndent()
         assertEquals(expected, snapshotCopyText(snapshot))
+    }
+
+    @Test
+    fun monthCopyBlockIsCompactAndListsEveryTransaction() {
+        val transactions = listOf(
+            trx(
+                id = 1,
+                title = "Kopi",
+                amount = 20_000,
+                type = "expense",
+                note = "",
+                at = millis(2026, Calendar.NOVEMBER, 21, 14, 5),
+            ),
+            trx(
+                id = 2,
+                title = "Gaji",
+                amount = 1_500_000,
+                type = "income",
+                note = "",
+                at = millis(2026, Calendar.NOVEMBER, 2, 8, 30),
+            ),
+        )
+        val report = buildMonthReport("2026-11", transactions, 1_480_000, 2.5)
+        val expected = """
+            *Nabungah — November 2026*
+            Pemasukan: Rp 1.500.000
+            Pengeluaran: Rp 20.000
+            Selisih: + Rp 1.480.000
+            Transaksi: 2
+            Saldo akhir bulan: Rp 1.480.000
+
+            Rincian:
+            21/11 Kopi — - Rp 20.000 · Cash
+            02/11 Gaji — + Rp 1.500.000 · Cash
+        """.trimIndent()
+        assertEquals(expected, monthCopyText("2026-11", report, transactions, mapOf(1L to "Cash")))
     }
 }

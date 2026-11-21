@@ -5,7 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 class NabungDb(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "nabungah.db", null, 2) {
+    SQLiteOpenHelper(context.applicationContext, "nabungah.db", null, 3) {
 
     init {
         // WAL journal mode (the platform's supported way to set it).
@@ -74,6 +74,20 @@ class NabungDb(context: Context) :
         )
         db.execSQL(
             """
+            CREATE TABLE transfer_log (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                amount         INTEGER NOT NULL CHECK (amount > 0),
+                from_wallet_id INTEGER REFERENCES wallet(id) ON DELETE SET NULL,
+                to_wallet_id   INTEGER REFERENCES wallet(id) ON DELETE SET NULL,
+                occurred_at    INTEGER NOT NULL,
+                month          TEXT    NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX idx_transfer_occurred ON transfer_log(occurred_at DESC)")
+
+        db.execSQL(
+            """
             CREATE TABLE month_snapshot (
                 month         TEXT PRIMARY KEY,
                 total_balance INTEGER NOT NULL,
@@ -97,6 +111,22 @@ class NabungDb(context: Context) :
                 "ALTER TABLE month_snapshot ADD COLUMN source TEXT NOT NULL DEFAULT 'manual' " +
                     "CHECK (source IN ('auto','manual'))"
             )
+        }
+        // v3: transfers get an activity-log entry without becoming income/expense.
+        if (oldVersion < 3) {
+            db.execSQL(
+                """
+                CREATE TABLE transfer_log (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    amount         INTEGER NOT NULL CHECK (amount > 0),
+                    from_wallet_id INTEGER REFERENCES wallet(id) ON DELETE SET NULL,
+                    to_wallet_id   INTEGER REFERENCES wallet(id) ON DELETE SET NULL,
+                    occurred_at    INTEGER NOT NULL,
+                    month          TEXT    NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX idx_transfer_occurred ON transfer_log(occurred_at DESC)")
         }
     }
 }

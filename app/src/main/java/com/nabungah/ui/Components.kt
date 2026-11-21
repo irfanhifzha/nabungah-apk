@@ -2,6 +2,7 @@ package com.nabungah.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,19 +12,23 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,6 +73,35 @@ fun Modifier.pressableCard(pressedScale: Float = 0.97f, onClick: () -> Unit): Mo
             indication = LocalIndication.current,
             onClick = onClick,
         )
+}
+
+/** Every actionable control gets a visible outline, so buttons never look like plain text. */
+@Composable
+fun OutlinedActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    compact: Boolean = false,
+    enabled: Boolean = true,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(if (compact) 36.dp else 46.dp),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.55f)),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+        contentPadding = PaddingValues(horizontal = if (compact) 12.dp else 18.dp),
+    ) {
+        Text(
+            text = text,
+            style = if (compact) MaterialTheme.typography.labelMedium
+            else MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
 }
 
 /** Section title with optional trailing actions, used above standalone cards. */
@@ -119,9 +153,7 @@ fun SectionCard(
 
 @Composable
 fun CardAction(text: String, onClick: () -> Unit, color: Color = MaterialTheme.colorScheme.primary) {
-    TextButton(onClick = onClick) {
-        Text(text, color = color, style = MaterialTheme.typography.labelLarge)
-    }
+    OutlinedActionButton(text = text, onClick = onClick, color = color, compact = true)
 }
 
 @Composable
@@ -316,7 +348,7 @@ fun EmptyState(
             color = Muted,
         )
         if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) { Text(actionLabel) }
+            OutlinedActionButton(text = actionLabel, onClick = onAction)
         }
     }
 }
@@ -335,22 +367,24 @@ fun ConfirmDialog(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = {
-            TextButton(onClick = {
-                onDismiss()
-                onConfirm()
-            }) {
-                Text(
-                    confirmLabel,
-                    color = if (destructive) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            OutlinedActionButton(
+                text = confirmLabel,
+                color = if (destructive) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.primary,
+                compact = true,
+                onClick = {
+                    onDismiss()
+                    onConfirm()
+                },
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Batal", color = Muted)
-            }
+            OutlinedActionButton(
+                text = "Batal",
+                color = Muted,
+                compact = true,
+                onClick = onDismiss,
+            )
         },
     )
 }

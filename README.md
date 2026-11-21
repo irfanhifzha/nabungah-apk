@@ -20,7 +20,7 @@ the implementation that satisfies it.
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Version | 1.3 (`versionCode` 3), schema v2 |
+| Version | 1.3 (`versionCode` 3), schema v3 |
 | Release APK | ~1.3 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
@@ -111,13 +111,15 @@ Rules that keep this safe:
 | Loading flag | `MainViewModel.loaded` | app process |
 | Selected tab | `Dashboard` (`rememberSaveable`, key `home`/`transactions`/`review`/`settings`) | composition + config change |
 | Activity search/filters/limit | `TransactionsTab` (`rememberSaveable`) | composition |
-| Review month + fee draft | `ReviewTab` (`rememberSaveable`, fee starts from the saved snapshot) | composition |
-| Snapshot source | `month_snapshot.source` (`auto`/`manual`, schema v2) | database |
+| Review month | `ReviewTab` (`rememberSaveable`) | composition |
+| Global fee percent | SharedPreferences (`nabungah_sync`, key `fee_percent`) | persistent |
+| Snapshot source | `month_snapshot.source` (`auto`/`manual`, schema v2 column) | database |
 | Open sheet / form field values | `Dashboard` + sheet composables | sheet lifetime |
 | Confirmation dialogs | sheet composables (`ConfirmDialog`) | dialog lifetime |
 | Backup status message | `SettingsTab` (`remember`) | composition |
 
-The fee draft is not persisted globally: Review reopens with the selected snapshot's fee, else 2.5.
+The fee percent is saved globally and edited from Settings or Review. Live previews use it; each
+snapshot keeps the fee it was saved with.
 
 ---
 
@@ -140,6 +142,11 @@ quick_action(id PK, title, amount > 0, type, created_at, updated_at)
 goal(id PK, title, target_amount > 0, saved_amount >= 0,
      status IN ('in_progress','completed','cancelled'),
      created_at, updated_at)
+
+transfer_log(id PK, amount > 0,
+             from_wallet_id REFERENCES wallet(id) ON DELETE SET NULL,
+             to_wallet_id REFERENCES wallet(id) ON DELETE SET NULL,
+             occurred_at, month)  -- Activity only; never income/expense
 
 month_snapshot(month TEXT PRIMARY KEY, total_balance, total_income,
                total_expense, fee_percent REAL, fee_expense, updated_at)
@@ -164,8 +171,8 @@ All of these run inside `db.beginTransaction()/setTransactionSuccessful()/endTra
 | Add transaction | insert `trx` + adjust wallet balance (expense guarded against negative) |
 | Delete transaction | adjust wallet balance back (clamped at 0) + delete row |
 | Delete all transactions | collect rows, reverse each effect, then delete all rows |
-| Transfer (Tukar Uang) | debit source + credit destination (balance read from DB at submit) |
-| Delete all wallets / quick actions / snapshots | one transaction around the bulk delete |
+| Transfer (Tukar Uang) | debit source + credit destination + insert `transfer_log` (balance read from DB at submit) |
+| Delete all wallets / quick actions / snapshots / data | one transaction around the bulk delete |
 
 `addTransaction` and `transfer` read the wallet balance **inside** the transaction; never trust
 the list shown in the form.
@@ -174,8 +181,9 @@ the list shown in the form.
 
 1. **Transaction delete reverses wallet effects** (recommended option chosen in the spec).
    Reversal is clamped so a wallet can never go below 0.
-2. **Transfers create no record.** They never appear in transactions, totals, or history and do
-   not change Total Balance.
+2. **Transfers never become income/expense.** They write only to `transfer_log`, appear in
+   Activity as informational rows, and do not change Total Balance. Reports and snapshots read
+   `trx` only.
 3. **Goals are decoupled from wallets.** Creating/editing/completing a goal never changes a
    balance or creates a transaction.
 4. **Fee Expense is informational.** It is computed for display/snapshot only and never deducted.
@@ -199,14 +207,16 @@ Storage Access Framework — no storage permissions and no external dependencies
   `nabungah-backup-yyyyMMdd-HHmm.json` (`Fmt.backupFileName`). `Repo.exportJson()` serializes every
   table with stable ids and a header:
   ```json
-  { "app": "nabungah", "version": 2, "exportedAt": 0,
+  { "app": "nabungah", "version": 3, "exportedAt": 0,
     "wallets": [...], "transactions": [...], "quickActions": [...],
-    "goals": [...], "snapshots": [{ ..., "source": "auto" }] }
+    "goals": [...], "snapshots": [{ ..., "source": "auto" }],
+    "transfers": [...] }
   ```
 - **Import** is destructive and always confirmed first: it **replaces** all local data rather than
   merging. `Repo.importJson()` parses and validates the whole document *before* opening the write
   transaction, so a malformed file cannot wipe the database. Header (`app`), `version` (currently
-  `2`; `1` is still accepted, with its snapshots treated as manual) and every row are validated;
+  `3`; `1` and `2` are still accepted, with missing transfers ignored and v1 snapshots treated as
+  manual) and every row are validated;
   DB constraints are the final guard and roll the transaction back.
 - Wallet ids are preserved so transaction links survive a round trip. After restore the view model
   reloads all state.
@@ -240,10 +250,10 @@ display layer). Never store formatted strings or floats for money.
 
 ### Exact clipboard blocks (do not reformat)
 
-`trxCopyText` and `snapshotCopyText` in `Sheets.kt` produce the WhatsApp blocks from GUIDE.md §4
-and §9. They are asserted character-for-character in `CopyTextTest`. Emojis, `*bold*` markers,
-field order, the `-` empty-note placeholder, and `Rp` formatting are contractual. Update the tests
-only if the spec itself changes.
+`trxCopyText`, `snapshotCopyText`, and `monthCopyText` in `Sheets.kt` produce the plain,
+professional clipboard blocks from GUIDE.md §4 and §9. They are asserted character-for-character
+in `CopyTextTest`. The `*Nabungah — …*` title, field order, compact month detail lines, the `-`
+empty-note placeholder, and `Rp` formatting are contractual.
 
 ---
 
@@ -257,14 +267,16 @@ Dashboard (Scaffold)
 ├── bottomBar   NavigationBar: Home | Activity | Review | Settings
 ├── FAB         "Add" → NewTransaction (Home and Activity only)
 └── content (by tab)
-    ├── HomeTab       header, hero balance (month in/out), Add/Transfer/Goal, large quick-action
-    │                 cards, wallet cards, savings goal cards, last 5 transactions
-    ├── TransactionsTab  search field, month/type pickers, record+totals line, day-grouped rows,
-    │                 "Show more" (20 at a time), empty/filtered empty states
-    ├── ReviewTab     month stepper (defaults to current month), live report (income, expense,
-    │                 net, month-end balance, count, average, biggest spending), fee card,
+    ├── HomeTab       header, hero balance (month in/out), wide wallet cards, Add/Transfer/Goal,
+    │                 large quick-action cards, savings goal cards, last 5 transactions
+    ├── TransactionsTab  search field, List/Calendar toggle, type filter (income/expense/transfer),
+    │                 day-grouped rows or a Monday-first month grid with per-day activity dots,
+    │                 selected-day list, "Show more" (20 at a time)
+    ├── ReviewTab     month stepper (defaults to current month), stat dashboard (income, expense,
+    │                 net, average, count, fee, month-over-month trend, biggest spending), fee card,
     │                 auto/manual status, manual edit sheet, saved-months history
-    └── SettingsTab   backup & restore, wallets, quick actions, goals, data & reset, about
+    └── SettingsTab   data summary, backup & restore, saved fee, wallets, quick actions, goals,
+                      data & reset (incl. delete-all-data), about
 ```
 
 - **Destructive actions live in Settings**, not on the dashboard: delete wallets/transactions/
@@ -283,8 +295,11 @@ Dashboard (Scaffold)
 - **Forms:** each sheet owns its form state (`remember { mutableStateOf(...) }`), calls the VM
   with `onError = { error = it }` and `onDone = { sheet = null }`. Do not close a sheet before the
   VM confirms success.
-- **Destructive actions:** always a `ConfirmDialog`; "Delete All" is a separate red text action
-  with its own confirmation. Wallet deletion copy must warn that the balance is not moved.
+- **Buttons:** every secondary/destructive action uses `OutlinedActionButton` (visible outline,
+  red border for deletes); filled `Button` is reserved for the primary save/export action.
+- **Destructive actions:** always a `ConfirmDialog`; "Delete All" is a separate red outlined
+  action with its own confirmation, and "Delete all data" additionally requires typing `HAPUS`.
+  Wallet deletion copy must warn that the balance is not moved.
 - **Insets:** `MainActivity` calls `enableEdgeToEdge()` and the dashboard applies
   `windowInsetsPadding(WindowInsets.safeDrawing)`. Sheets add `imePadding()` +
   `navigationBarsPadding()` in `SheetColumn`.
@@ -292,10 +307,10 @@ Dashboard (Scaffold)
   `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`) plus the hero gradient colors
   (`HeroTop`/`HeroBottom`, `OnHeroMuted`, `HeroIncome`, `HeroExpense`, `SoftTeal`, tinted
   backgrounds) are declared in `Theme.kt`; reuse them rather than hardcoding new colors.
-- **Components:** `SectionCard`, `CardAction`, `StatTile`, `EmptyState`, `LabeledTextField`,
-  `MoneyField`, `PickerField`, `FormError`, `SelectableRow`, `ConfirmDialog`, `CopyButton`,
-  `EmptyText` cover the recurring patterns. Prefer extending one of these over adding a one-off
-  widget.
+- **Components:** `SectionCard`, `CardAction`, `OutlinedActionButton`, `StatTile`, `EmptyState`,
+  `LabeledTextField`, `MoneyField`, `PickerField`, `FormError`, `SelectableRow`, `ConfirmDialog`,
+  `CopyButton`, `EmptyText` cover the recurring patterns. Prefer extending one of these over adding
+  a one-off widget.
 
 ### Goal progress
 
@@ -338,7 +353,7 @@ merge the two.
 
 Accounts/auth, sync, network calls, telemetry, charts, budgets, recurring transactions, CSV
 export, wallet/transaction editing (without an explicit spec decision), goal↔wallet
-auto-deduction, or a transfer history table feeding income/expense totals.
+auto-deduction, or letting `transfer_log` feed income/expense totals.
 
 ---
 
@@ -346,13 +361,55 @@ auto-deduction, or a transfer history table feeding income/expense totals.
 
 ```bash
 ./gradlew :app:assembleDebug            # debug APK
-./gradlew :app:assembleRelease          # minified installable APK
-./gradlew :app:testDebugUnitTest        # JVM: formatting, clipboard blocks, file names (10 tests)
-./gradlew :app:connectedDebugAndroidTest # DB behavior + backup tests (12 tests)
+./gradlew :app:assembleRelease          # minified signed APK
+./gradlew :app:testDebugUnitTest        # JVM: formatting, month math, clipboard blocks
 
 adb install -r app/build/outputs/apk/release/nabungah-release.apk
 adb shell am start -n com.nabungah/.MainActivity
 ```
+
+### Build from Windows `cmd`
+
+Use `gradlew.bat` (not `./gradlew`) and backslashes. Open **Command Prompt** in the project root —
+the folder containing `gradlew.bat`:
+
+```bat
+cd /d D:\webvibecoding\nabungah\nabungah-apk
+
+gradlew.bat --version
+rem First run downloads the Gradle distribution; later runs use the cache.
+
+gradlew.bat :app:testDebugUnitTest
+gradlew.bat :app:assembleDebug
+gradlew.bat :app:assembleRelease
+```
+
+Or without changing directory:
+
+```bat
+gradlew.bat -p D:\webvibecoding\nabungah\nabungah-apk :app:assembleRelease
+```
+
+Install and open it (device connected with USB debugging, or an emulator running):
+
+```bat
+adb install -r app\build\outputs\apk\release\nabungah-release.apk
+adb shell am start -n com.nabungah/.MainActivity
+```
+
+If PowerShell is used instead, prefix with `.\`: `.\gradlew.bat :app:assembleDebug`.
+
+Requirements for a local build:
+
+- **JDK 17** on `PATH` (`java -version` should report 17). The Android Gradle Plugin targets 17.
+- **Android SDK** installed; `local.properties` must contain `sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk`
+  (the file is git-ignored and machine-specific).
+- Release signing: if `keystore.properties` exists in the project root, `assembleRelease` uses it.
+  Otherwise it falls back to the debug key, so the APK still installs but cannot update the
+  published release. CI supplies the same values through `NABUNGAH_KEYSTORE_BASE64`,
+  `NABUNGAH_KEYSTORE_PASSWORD`, `NABUNGAH_KEY_ALIAS`, `NABUNGAH_KEY_PASSWORD`.
+- Verify the result: `gradlew.bat :app:testDebugUnitTest` must print `BUILD SUCCESSFUL`, and the
+  APK should appear at the output path below.
 
 **Where the APK lands** — the module is `app`, but artifacts are named after the app:
 
@@ -365,12 +422,13 @@ adb shell am start -n com.nabungah/.MainActivity
 
 - `local.properties` points at the local SDK (`sdk.dir=…`) and is git-ignored; each machine needs
   its own. Everything else is committed (including the Gradle wrapper).
-- The release build signs with the **debug keystore** so the APK is installable locally. Replace
-  `signingConfig` with a real keystore before distribution.
+- The release build prefers `keystore.properties` (or the CI env vars) and only falls back to the
+  debug keystore when no release key is available. Keep `nabungah-release.jks` and
+  `keystore.properties` backed up: without them an update cannot keep the same signing identity.
 - Instrumentation tests use the real database: each test deletes `nabungah.db` in `@Before` and
   `@After`, and closes its `Repo`. Keep them independent and order-free.
 - Verification expectations: `lintVitalRelease` runs as part of `assembleRelease`. If you change a
-  validation rule, update the corresponding message assertions in `RepoTest`.
+  validation rule, update the corresponding message assertions in the tests.
 
 ### Toolchain gotchas
 
@@ -425,7 +483,7 @@ that rewrite is explicitly out of scope for this rebuild.
 ## 11. Known limitations / future work
 
 - Backup is whole-app replace-only (no merge, no partial restore) and has no automatic/scheduled
-  export or file encryption. It covers the five tables, not the device's Android auto-backup.
+  export or file encryption. It covers the six data tables, not the device's Android auto-backup.
 - Auto snapshots are maintained at month rollover, not continuously: deleting transactions from an
   old month won't refresh its `auto` snapshot until the user taps "Refresh automatic report" (or a
   later sync includes that month). The current month is never auto-saved while it is running.
