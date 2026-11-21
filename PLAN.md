@@ -42,9 +42,14 @@ INI RENCANA UNTUK VERSI `1.3`.
   `..._ALIAS`, `..._KEY_PASSWORD`). Keystore asli ada di `nabungah-release.jks` +
   `keystore.properties` (keduanya di-gitignore) — simpan cadangannya, tanpa itu update APK
   tidak bisa ditandatangani dengan identitas yang sama.
-- [ ] add total saldo and wallet info in laporan page.
-- [ ] fix card margin layout "transaksi" cause the Rp.. text part its too close to right edge.
-- [ ] update dompet div, more like square card div.
+- [x] Laporan kini punya kartu "Saldo saat ini": total saldo semua dompet plus rincian saldo
+  per dompet, terpisah dari angka akhir bulan.
+- [x] Kartu transaksi diberi padding kanan 14dp dan jarak 10dp sebelum nominal, plus
+  `maxLines = 1`, jadi teks Rp tidak lagi menempel di tepi kartu.
+- [x] Kartu dompet di Home diubah menjadi grid dua kolom berukuran persegi (`aspectRatio(1f)`):
+  avatar + persen di atas, nama/nominal/progress bar di bawah.
+- [ ] Putuskan apakah tiga perubahan pasca-tag di atas dirilis sebagai 1.3.1 (tag `v1.3` sudah
+  terbit dan tidak menyertakan perubahan ini).
 - [ ] ...
 - [x] Tag `v1.3` sudah dipush. Workflow rilis hijau (3m12s): unit test, build, upload
   artifact, dan GitHub Release terbit di https://github.com/irfanhifzha/nabungah-apk/releases/tag/v1.3

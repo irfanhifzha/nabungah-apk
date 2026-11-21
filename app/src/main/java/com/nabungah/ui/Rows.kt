@@ -56,7 +56,7 @@ fun TransactionRow(trx: Trx, walletName: String) {
         modifier = Modifier
             .fillMaxWidth()
             .appCard()
-            .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 4.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp),
     ) {
         Row {
             val accent = if (trx.type == "income") IncomeGreen else ExpenseRed
@@ -105,7 +105,8 @@ fun TransactionRow(trx: Trx, walletName: String) {
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = if (trx.type == "income") IncomeGreen else ExpenseRed,
-                modifier = Modifier.padding(top = 2.dp, start = 6.dp),
+                modifier = Modifier.padding(top = 2.dp, start = 10.dp),
+                maxLines = 1,
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

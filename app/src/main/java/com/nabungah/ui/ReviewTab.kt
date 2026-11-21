@@ -203,6 +203,36 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
+            SectionCard(title = "Saldo saat ini") {
+                AmountRow(
+                    "Total saldo",
+                    data.totalBalance,
+                    MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Saldo semua dompet saat ini, bukan angka akhir bulan.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                )
+                if (data.wallets.isEmpty()) {
+                    EmptyText("Belum ada dompet.")
+                } else {
+                    HorizontalDivider(
+                        color = CardBorder,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    data.wallets.forEach { wallet ->
+                        AmountRow(
+                            wallet.name,
+                            wallet.balance,
+                            MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
             SectionCard(title = "Biaya bulan ini") {
                 Text(
                     text = "Hanya informasi. Biaya adalah bagian pemasukan bulan ini yang perlu " +

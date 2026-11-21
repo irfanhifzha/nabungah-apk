@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -369,8 +370,18 @@ private fun WalletsSection(data: AppData, onAdd: () -> Unit, onTransfer: () -> U
             )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                data.wallets.forEach { wallet ->
-                    WalletCard(wallet.name, wallet.balance, data.totalBalance)
+                data.wallets.chunked(2).forEach { rowWallets ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowWallets.forEach { wallet ->
+                            WalletCard(
+                                name = wallet.name,
+                                balance = wallet.balance,
+                                total = data.totalBalance,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (rowWallets.size == 1) Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -378,7 +389,12 @@ private fun WalletsSection(data: AppData, onAdd: () -> Unit, onTransfer: () -> U
 }
 
 @Composable
-private fun WalletCard(name: String, balance: Long, total: Long) {
+private fun WalletCard(
+    name: String,
+    balance: Long,
+    total: Long,
+    modifier: Modifier = Modifier,
+) {
     val rawShare = if (total <= 0) 0f else (balance.toFloat() / total).coerceIn(0f, 1f)
     val shareProgress by animateFloatAsState(
         targetValue = rawShare,
@@ -386,58 +402,69 @@ private fun WalletCard(name: String, balance: Long, total: Long) {
         label = "walletShare",
     )
     val share = (rawShare * 100).roundToInt()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
+    Column(
+        modifier = modifier
+            .aspectRatio(1f)
             .appCard()
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(SoftTeal),
-            contentAlignment = Alignment.Center,
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(SoftTeal),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = name.take(1).uppercase(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.weight(1f))
             Text(
-                text = name.take(1).uppercase(),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
+                text = "$share%",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Muted,
             )
         }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column {
             Text(
                 text = name,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = Fmt.rp(balance),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
                 progress = { shareProgress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(3.dp)),
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = CardBorder,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "$share% dari total saldo",
+                text = "dari total saldo",
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
             )
         }
-        Text(
-            text = Fmt.rp(balance),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
     }
 }
 
