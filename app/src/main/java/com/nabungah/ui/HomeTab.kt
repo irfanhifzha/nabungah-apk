@@ -577,6 +577,15 @@ private fun GoalProgress(goal: Goal, onEdit: (Goal) -> Unit) {
                 fontWeight = FontWeight.SemiBold,
             )
         }
+        if (goal.description.isNotBlank()) {
+            Text(
+                text = goal.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier

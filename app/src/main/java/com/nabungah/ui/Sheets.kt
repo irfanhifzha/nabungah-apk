@@ -474,6 +474,7 @@ fun AddQuickActionSheet(vm: MainViewModel, onClose: () -> Unit) {
 @Composable
 fun AddGoalSheet(vm: MainViewModel, onClose: () -> Unit) {
     var title by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
     var target by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -481,6 +482,7 @@ fun AddGoalSheet(vm: MainViewModel, onClose: () -> Unit) {
         vm.addGoal(
             title = title,
             target = Fmt.digitsToLong(target),
+            description = description,
             onError = { error = it },
             onDone = onClose,
         )
@@ -490,6 +492,13 @@ fun AddGoalSheet(vm: MainViewModel, onClose: () -> Unit) {
         SheetTitle("Buat Target")
         SheetNote("Target tidak terhubung ke dompet. Pindahkan uangnya secara manual.")
         LabeledTextField(value = title, onValueChange = { title = it }, label = "Nama Target")
+        LabeledTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = "Deskripsi (opsional)",
+            singleLine = false,
+            minLines = 2,
+        )
         MoneyField(
             label = "Jumlah Target",
             digits = target,
@@ -504,6 +513,7 @@ fun AddGoalSheet(vm: MainViewModel, onClose: () -> Unit) {
 @Composable
 fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
     var title by rememberSaveable { mutableStateOf(goal.title) }
+    var description by rememberSaveable { mutableStateOf(goal.description) }
     var target by rememberSaveable { mutableStateOf(goal.targetAmount.toString()) }
     var saved by rememberSaveable { mutableStateOf(goal.savedAmount.toString()) }
     var status by rememberSaveable { mutableStateOf(goal.status) }
@@ -513,6 +523,13 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
     SheetColumn {
         SheetTitle("Edit Target")
         LabeledTextField(value = title, onValueChange = { title = it }, label = "Nama Target")
+        LabeledTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = "Deskripsi (opsional)",
+            singleLine = false,
+            minLines = 2,
+        )
         MoneyField(label = "Jumlah Target", digits = target, onDigitsChange = { target = it })
         MoneyField(label = "Sudah Terkumpul", digits = saved, onDigitsChange = { saved = it })
         Text("Status", style = MaterialTheme.typography.labelLarge)
@@ -537,6 +554,7 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
                 target = Fmt.digitsToLong(target),
                 saved = Fmt.digitsToLong(saved),
                 status = status,
+                description = description,
                 onError = { error = it },
                 onDone = onClose,
             )

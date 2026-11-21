@@ -20,7 +20,7 @@ the implementation that satisfies it.
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Version | 1.4.1 (`versionCode` 5), schema v4 |
+| Version | 1.4.1 (`versionCode` 5), schema v5 |
 | Release APK | ~1.5 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
@@ -35,7 +35,7 @@ app/src/main/java/com/nabungah/
 ├── MainActivity.kt          Single activity; edge-to-edge; hosts Dashboard
 ├── data/
 │   ├── Models.kt            Wallet, Trx, QuickAction, Goal, Snapshot, AppData, audit models
-│   ├── NabungDb.kt          Schema v4 (wallets, transactions, goals, transfers, snapshots)
+│   ├── NabungDb.kt          Schema v5 (wallets, transactions, goals, transfers, snapshots)
 │   └── Repo.kt              All SQL reads/writes, validation, JSON backup/restore
 └── ui/
     ├── Theme.kt             Colors, status/semantic colors, NabungTheme
@@ -140,7 +140,7 @@ trx(id PK, title, amount CHECK(amount > 0),
 
 quick_action(id PK, title, amount > 0, type, created_at, updated_at)
 
-goal(id PK, title, target_amount > 0, saved_amount >= 0,
+goal(id PK, title, description DEFAULT '', target_amount > 0, saved_amount >= 0,
      status IN ('in_progress','completed','cancelled'),
      created_at, updated_at)
 
@@ -215,19 +215,20 @@ Storage Access Framework — no storage permissions and no external dependencies
   `nabungah-backup-yyyyMMdd-HHmm.json` (`Fmt.backupFileName`). `Repo.exportJson()` serializes every
   table with stable ids and a header:
   ```json
-  { "app": "nabungah", "version": 5, "exportedAt": 0, "feePercent": 2.5,
+  { "app": "nabungah", "version": 6, "exportedAt": 0, "feePercent": 2.5,
     "wallets": [...], "transactions": [...], "quickActions": [...],
-    "goals": [...], "snapshots": [{ ..., "source": "auto" }],
+    "goals": [{ ..., "description": "" }], "snapshots": [{ ..., "source": "auto" }],
     "transfers": [...] }
   ```
 - **Import** is destructive and always confirmed first: it **replaces** all local data rather than
   merging. `Repo.importJson()` parses and validates the whole document *before* opening the write
   transaction, so a malformed file cannot wipe the database. Header (`app`), `version` (currently
-  `5`; `1`–`4` are still accepted, with starting balances derived, the saved fee defaulting to
-  2.5%, and missing transfers ignored) and every row are validated, including duplicate ids,
-  types, months, wallet references and non-negative snapshot numbers. The global fee percentage
-  is exported and restored with the data. Before replacing anything, the UI shows a preview of the
-  file's record counts and fee; DB constraints are the final guard and roll the transaction back.
+  `6`; `1`–`5` are still accepted, with starting balances derived, the saved fee defaulting to
+  2.5%, goal descriptions defaulting to empty, and missing transfers ignored) and every row are
+  validated, including duplicate ids, types, months, wallet references and non-negative snapshot
+  numbers. The global fee percentage is exported and restored with the data. Before replacing
+  anything, the UI shows a preview of the file's record counts and fee; DB constraints are the
+  final guard and roll the transaction back.
 - Wallet ids are preserved so transaction links survive a round trip. After restore the view model
   reloads all state.
 - File I/O happens on `Dispatchers.IO` in `MainViewModel.exportBackup` / `importBackup`; the UI
@@ -313,10 +314,11 @@ Dashboard (Scaffold)
 - **Insets:** `MainActivity` calls `enableEdgeToEdge()` and the dashboard applies
   `windowInsetsPadding(WindowInsets.safeDrawing)`. Sheets add `imePadding()` +
   `navigationBarsPadding()` in `SheetColumn`.
-- **Theme:** follows the system light/dark setting (`isSystemInDarkTheme()`). Semantic colors
-  (`IncomeGreen`, `ExpenseRed`, `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`, tints) are
-  composable getters in `Theme.kt`; `appCard()` uses `MaterialTheme.colorScheme.surface`. Reuse
-  them rather than hardcoding white or a new color.
+- **Theme:** Settings exposes **Sistem / Terang / Gelap** via `ThemeMode`; the choice is
+  persisted locally and the system bars follow it. Semantic colors (`IncomeGreen`, `ExpenseRed`,
+  `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`, tints) read `LocalDarkTheme` in `Theme.kt`;
+  `appCard()` uses `MaterialTheme.colorScheme.surface`. Reuse them rather than hardcoding white
+  or a new color.
 - **Layout:** below 600 dp the shell uses a bottom bar; above it, a `NavigationRail`. Content
   remains one readable column.
 - **Components:** `SectionCard`, `CardAction`, `OutlinedActionButton`, `StatTile`, `EmptyState`,
@@ -496,7 +498,7 @@ that rewrite is explicitly out of scope for this rebuild.
 
 | Version | Notes |
 |---|---|
-| 1.4.1 (`versionCode` 5) | Copy action moved into each Activity row, quick-action corner "+" removed, saved fee included in backup v5. |
+| 1.4.1 (`versionCode` 5) | Copy action moved into each Activity row, quick-action corner "+" removed, system/light/dark theme setting, optional goal descriptions (schema v5), fixed import confirmation, saved fee in backup v6. |
 | 1.4 (`versionCode` 4) | Schema v4 (`starting_balance`, checks), transaction edit/backdate/detail, bulk delete, undo snackbar, wallet filter, backup preview/info, consistency audit, dark theme, adaptive icon, nav rail, Compose UI tests. |
 | 1.3 (`versionCode` 3) | Transfer log, saved global fee, Pengaturan redesign, calendar Activity, report stat dashboard, copy blocks, Windows build guide. |
 | 1.2 (`versionCode` 2) | Live monthly report, automatic/manual snapshots (schema v2), load error state. |
@@ -517,5 +519,5 @@ that rewrite is explicitly out of scope for this rebuild.
 - Cold-start timing from the software-rendered emulator is indicative only; re-measure on a
   physical low-end device before treating the <1 s target as met. The APK already embeds the
   Compose baseline profile (`assets/dexopt/baseline.prof`).
-- Dark theme follows the system setting; themed icons require Android 13+. Tablet layout is a
-  navigation rail only — Home/Activity two-column layouts are still future work.
+- Theme can follow the system or be forced to Terang/Gelap; themed icons require Android 13+.
+  Tablet layout is a navigation rail only — Home/Activity two-column layouts are still future work.

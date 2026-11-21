@@ -206,8 +206,11 @@ class RepoTest {
         val cash = walletId("Cash")
         repo.addTransaction("Kopi", 20_000, "expense", cash, "pagi")
         repo.addQuickAction("Makan", 15_000, "expense")
-        repo.addGoal("Laptop", 5_000_000)
-        repo.updateGoal(repo.load().goals.single().id, "Laptop", 5_000_000, 500_000, "in_progress")
+        repo.addGoal("Laptop", 5_000_000, "Untuk kuliah")
+        repo.updateGoal(
+            repo.load().goals.single().id, "Laptop", 5_000_000, 500_000, "in_progress",
+            description = "Untuk kuliah dan desain",
+        )
         repo.upsertSnapshot("2026-11", 80_000, 0, 20_000, 2.5, 0)
 
         val json = repo.exportJson()
@@ -238,6 +241,7 @@ class RepoTest {
         assertEquals("Makan", restored.quickActions.single().title)
         assertEquals(500_000L, restored.goals.single().savedAmount)
         assertEquals(5_000_000L, restored.goals.single().targetAmount)
+        assertEquals("Untuk kuliah dan desain", restored.goals.single().description)
         assertEquals(80_000L, restored.snapshots.single().totalBalance)
         assertEquals(2.5, restored.snapshots.single().feePercent, 0.0001)
         assertTrue(restored.snapshots.single().isManual)
@@ -408,7 +412,7 @@ class RepoTest {
 
         val json = repo.exportJson()
         val preview = repo.inspectBackup(json)
-        assertEquals(5, preview.version)
+        assertEquals(6, preview.version)
         assertEquals(7.5, preview.feePercent, 0.0001)
         assertEquals(1, preview.wallets)
         assertEquals(1, preview.transactions)

@@ -108,6 +108,11 @@ class MigrationTest {
             arrayOf(now),
         )
         db.execSQL(
+            "INSERT INTO goal (id,title,target_amount,saved_amount,status,created_at,updated_at) " +
+                "VALUES (1,'Laptop',5000000,0,'in_progress',?,?)",
+            arrayOf(now, now),
+        )
+        db.execSQL(
             "INSERT INTO month_snapshot VALUES ('2026-01', -10, -20, -30, 180, -5, ?)",
             arrayOf(now),
         )
@@ -120,6 +125,7 @@ class MigrationTest {
             assertEquals(100_000L, loaded.wallets.single().startingBalance)
             assertEquals(90_000L, loaded.wallets.single().balance)
             assertEquals(Fmt.monthKey(now), loaded.transactions.single().month)
+            assertEquals("", loaded.goals.single().description)
             assertEquals(0L, loaded.snapshots.single().totalBalance)
             assertEquals(0L, loaded.snapshots.single().totalIncome)
             assertEquals(100.0, loaded.snapshots.single().feePercent, 0.0001)

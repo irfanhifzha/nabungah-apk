@@ -93,7 +93,15 @@ INI RENCANA UNTUK VERSI `1.3`.
   Belum ada commit/push/tag untuk batch ini.
 - [x] Batch 1.4.1: tombol Salin di baris Aktivitas dipindah ke sisi nominal, ikon "+" di kartu
   Aksi Cepat dihapus, biaya global ikut diekspor/diimpor (backup v5), dan versi naik ke
-  `versionCode` 5 / `1.4.1`. Build release 1.549.702 byte, bertanda tangan `CN=Nabungah`.
-- [ ] Ditunda dan butuh keputusan produk/pekerjaan terpisah: grafik, kategori/tag, widget,
-  layout dua kolom tablet, uji perangkat fisik (TalkBack/font scale/cold start).
-- [ ] ...
+  `versionCode` 5 / `1.4.1`; lanjutan batch menambah tema dan deskripsi target (schema v5,
+  backup v6).
+- [x] Pengaturan tema **Sistem / Terang / Gelap** tersimpan lokal; status bar dan warna
+  semantik mengikuti pilihan.
+- [x] **Deskripsi target** opsional di skema v5 (migrasi v1→v5), form tambah/edit, kartu Home dan
+  Pengaturan, serta backup v6 (v1–v5 tetap dapat diimpor).
+- [x] Perbaikan impor: `ConfirmDialog` memanggil `onDismiss` sebelum `onConfirm`; URI file kini
+  diambil sebelum state dialog dibersihkan.
+- [x] Build 1.4.1 final: 14 unit test lulus, compile androidTest sukses, `assembleDebug` dan
+  `assembleRelease` sukses. APK rilis 1.549.702 byte, `versionCode` 5 / `1.4.1`, bertanda tangan
+  `CN=Nabungah`.
+- [x] Tag `v1.4.1` dihapus lalu dibuat ulang di commit final.

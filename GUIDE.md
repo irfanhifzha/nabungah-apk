@@ -27,7 +27,7 @@ Actions, Nabung (savings goals), then the five most recent transactions with a l
 **Review** — one month at a time: income/expense/net, the informational fee calculator, saving
 (upserting) that month's snapshot, then Monthly History (saved snapshots).
 
-**Settings** — backup/restore, wallet and quick-action setup, goal list, destructive data tools,
+**Settings** — appearance (system/light/dark), backup/restore, wallet and quick-action setup, goal list, destructive data tools,
 and the offline/about note.
 
 This split is the product's structure; keep it.
@@ -41,7 +41,7 @@ This split is the product's structure; keep it.
 | **Wallet** | A place money sits: Cash, DANA, Bank Jago. Holds a balance. |
 | **Transaction** | One movement of money into or out of one wallet. `income` or `expense`. Also carries the *title* and an optional note. |
 | **Quick Action** | A saved transaction template (title + amount + type). Fills the transaction form in one tap. Never moves money itself. |
-| **Goal** | A savings target with a saved amount and status. **Not linked to any wallet.** |
+| **Goal** | A savings target with an optional description, saved amount, and status. **Not linked to any wallet.** |
 | **Transfer ("Tukar Uang")** | Moves a balance between two wallets without income/expense semantics. Creates an activity-log entry only, never a transaction. |
 | **Monthly snapshot** | A stored copy of that month's totals. Saved manually. |
 | **Fee %** | A notional percentage of income, stored per snapshot. Never deducted from anything. |
@@ -175,15 +175,16 @@ No edit action for quick actions — recreating means delete + add.
 
 ## 6. Nabung — savings goals
 
-**A goal = `title`, `target_amount`, `saved_amount`, `status` ∈ {in_progress, completed, cancelled}.**
+**A goal = `title`, optional `description`, `target_amount`, `saved_amount`, `status` ∈ {in_progress, completed, cancelled}.**
 
 ### Create
-- Fields: Goal Title (required), Target Amount (Rp, > 0).
+- Fields: Goal Title (required), Description (optional, multiline), Target Amount (Rp, > 0).
 - New goal always: `saved_amount = 0`, `status = in_progress`.
 
 ### Display
 Each goal card shows:
 - Title.
+- Description when non-empty (up to two lines on Home, one line in Settings).
 - Status, capitalized with `_` replaced by a space; colour: `in_progress` orange, `completed` green, `cancelled` red.
 - Progress bar: `saved / target * 100`, clamped to 0–100, width animates (~500 ms); guard `target = 0` (treat as 1 or 0%, never divide by zero).
 - Percentage label, rounded to integer, clamped at 100.
@@ -191,7 +192,7 @@ Each goal card shows:
 - A permanent note under the list: goals are **not** connected to wallets, so the user must move money manually.
 
 ### Edit
-- The editor exposes: title, target amount, saved amount (≥ 0), status (In Progress / Completed / Cancelled).
+- The editor exposes: title, description, target amount, saved amount (≥ 0), status (In Progress / Completed / Cancelled).
 - Validation: title non-empty, target > 0, saved ≥ 0.
 - Save sets `updated_at`.
 - Editor also contains **Remove** (confirmation required).
@@ -239,7 +240,7 @@ Shows:
   Transfers and goals never change the total, so this reconstruction is exact unless a wallet was
   deleted (which removes balance without a transaction).
 - **Average expense** and the top three expense titles for the month.
-- **Fee %** — a saved global setting, default **2.5**, editable from Settings or the Review fee card. It is included in JSON backup/restore (backup v5+).
+- **Fee %** — a saved global setting, default **2.5**, editable from Settings or the Review fee card. It is included in JSON backup/restore (backup v5+); goal descriptions are included from v6.
 - **Fee Expense** = `round(Total Income × Fee % / 100)`; purely informational, not deducted anywhere.
 - **Status** — `Running month` (current month, never auto-saved), `Automatic` (maintained by the app),
   `Manual` (frozen by the user), or `Not saved`.
@@ -351,6 +352,7 @@ quick_action (
 goal (
   id            INTEGER PRIMARY KEY,
   title         TEXT    NOT NULL,
+  description   TEXT    NOT NULL DEFAULT '',   -- schema v5
   target_amount INTEGER NOT NULL CHECK (target_amount > 0),
   saved_amount  INTEGER NOT NULL DEFAULT 0 CHECK (saved_amount >= 0),
   status        TEXT    NOT NULL DEFAULT 'in_progress'
@@ -437,4 +439,4 @@ These are real inconsistencies in the original. Each needs an explicit decision 
 
 ## 15. Out of scope
 
-Multi-user, accounts/auth, cloud sync, budgets per category, recurring transactions, charts/analytics screens, currency conversion, CSV/Sheets export, ads, sharing, and anything else not described above. The value of this app is that it is small and does one job; dark theming is now supported because it adds no data or network surface.
+Multi-user, accounts/auth, cloud sync, budgets per category, recurring transactions, charts/analytics screens, currency conversion, CSV/Sheets export, ads, sharing, and anything else not described above. The value of this app is that it is small and does one job; system/light/dark theming is supported because it adds no data or network surface.

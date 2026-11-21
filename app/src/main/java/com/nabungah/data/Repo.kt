@@ -107,6 +107,7 @@ class Repo(context: Context) {
                         Goal(
                             id = c.getLong(c.getColumnIndexOrThrow("id")),
                             title = c.getString(c.getColumnIndexOrThrow("title")),
+                            description = c.getString(c.getColumnIndexOrThrow("description")),
                             targetAmount = c.getLong(c.getColumnIndexOrThrow("target_amount")),
                             savedAmount = c.getLong(c.getColumnIndexOrThrow("saved_amount")),
                             status = c.getString(c.getColumnIndexOrThrow("status")),
@@ -502,7 +503,7 @@ class Repo(context: Context) {
 
     // ---------------------------------------------------------------- goals
 
-    fun addGoal(title: String, target: Long) {
+    fun addGoal(title: String, target: Long, description: String = "") {
         val trimmed = title.trim()
         if (trimmed.isEmpty()) throw ValidationException("Judul wajib diisi")
         if (target <= 0) throw ValidationException("Jumlah target harus lebih dari 0")
@@ -511,6 +512,7 @@ class Repo(context: Context) {
             "goal", null,
             ContentValues().apply {
                 put("title", trimmed)
+                put("description", description.trim())
                 put("target_amount", target)
                 put("saved_amount", 0L)
                 put("status", "in_progress")
@@ -521,7 +523,14 @@ class Repo(context: Context) {
         // Wallet balances are deliberately untouched: goals are not linked to wallets.
     }
 
-    fun updateGoal(id: Long, title: String, target: Long, saved: Long, status: String) {
+    fun updateGoal(
+        id: Long,
+        title: String,
+        target: Long,
+        saved: Long,
+        status: String,
+        description: String = "",
+    ) {
         val trimmed = title.trim()
         if (trimmed.isEmpty()) throw ValidationException("Judul wajib diisi")
         if (target <= 0) throw ValidationException("Jumlah target harus lebih dari 0")
@@ -536,6 +545,7 @@ class Repo(context: Context) {
             "goal",
             ContentValues().apply {
                 put("title", trimmed)
+                put("description", description.trim())
                 put("target_amount", target)
                 put("saved_amount", saved)
                 put("status", normalizedStatus)
@@ -564,6 +574,18 @@ class Repo(context: Context) {
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putFloat(KEY_FEE_PERCENT, percent.toFloat())
+            .apply()
+    }
+
+    /** Locally stored appearance mode (`system`, `light`, or `dark`). */
+    fun themeMode(): String? = appContext
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(KEY_THEME_MODE, null)
+
+    fun saveThemeMode(mode: String) {
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_THEME_MODE, mode)
             .apply()
     }
 
@@ -698,7 +720,7 @@ class Repo(context: Context) {
 
     // --------------------------------------------------------------- backup
 
-    /** Serializes every table and the saved fee to one JSON document (schema version 5). */
+    /** Serializes every table and the saved fee to one JSON document (schema version 6). */
     fun exportJson(): String {
         val root = JSONObject()
         root.put("app", BACKUP_APP)
@@ -766,6 +788,7 @@ class Repo(context: Context) {
                     JSONObject()
                         .put("id", c.longOf("id"))
                         .put("title", c.stringOf("title"))
+                        .put("description", c.stringOf("description"))
                         .put("target_amount", c.longOf("target_amount"))
                         .put("saved_amount", c.longOf("saved_amount"))
                         .put("status", c.stringOf("status"))
@@ -998,6 +1021,7 @@ class Repo(context: Context) {
                 val target = o.getLong("target_amount")
                 val saved = o.optLong("saved_amount", 0)
                 val status = o.optString("status", "in_progress")
+                val description = if (version >= 6) o.optString("description", "") else ""
                 if (o.getString("title").trim().isEmpty() || target <= 0 || saved < 0 ||
                     status !in setOf("in_progress", "completed", "cancelled")
                 ) {
@@ -1007,6 +1031,7 @@ class Repo(context: Context) {
                     ContentValues().apply {
                         put("id", id)
                         put("title", o.getString("title").trim())
+                        put("description", description.trim())
                         put("target_amount", target)
                         put("saved_amount", saved)
                         put("status", if (saved >= target && status != "cancelled") "completed" else status)
@@ -1111,10 +1136,11 @@ class Repo(context: Context) {
 
     companion object {
         private const val BACKUP_APP = "nabungah"
-        private const val BACKUP_VERSION = 5
+        private const val BACKUP_VERSION = 6
         private const val PREFS_NAME = "nabungah_sync"
         private const val KEY_LAST_AUTO_MONTH = "last_auto_month"
         private const val KEY_FEE_PERCENT = "fee_percent"
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_LAST_EXPORT_AT = "last_export_at"
         private const val KEY_LAST_EXPORT_BYTES = "last_export_bytes"
         private const val DEFAULT_FEE_PERCENT = 2.5

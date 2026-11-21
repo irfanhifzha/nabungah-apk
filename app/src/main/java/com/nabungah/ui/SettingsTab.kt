@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -124,6 +125,26 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item { DataSummary(data) }
+
+        item {
+            SectionCard(title = "Tampilan") {
+                Text(
+                    text = "Pilih tema aplikasi. Pengaturan ini hanya tersimpan di perangkat ini.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = vm.themeMode == mode,
+                            onClick = { vm.updateThemeMode(mode) },
+                            label = { Text(mode.label) },
+                        )
+                    }
+                }
+            }
+        }
 
         item {
             SectionCard(title = "Backup & pemulihan") {
@@ -409,6 +430,7 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     }
 
     preview?.let { info ->
+        val selectedUri = pendingUri
         ConfirmDialog(
             title = "Ganti data dengan backup ini?",
             message = "File versi ${info.version}, diekspor " +
@@ -420,12 +442,10 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 "Seluruh data saat ini akan diganti dan tidak bisa dikembalikan.",
             confirmLabel = "Ganti data",
             onConfirm = {
-                val uri = pendingUri
-                preview = null
-                pendingUri = null
-                if (uri != null) {
+                // ConfirmDialog calls onDismiss before onConfirm, which clears pendingUri.
+                if (selectedUri != null) {
                     vm.importBackup(
-                        uri = uri,
+                        uri = selectedUri,
                         onError = { backupMessage = it; backupFailed = true },
                         onDone = { backupMessage = "Backup berhasil dipulihkan."; backupFailed = false },
                     )
@@ -580,6 +600,15 @@ private fun GoalRow(goal: Goal, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )
+            if (goal.description.isNotBlank()) {
+                Text(
+                    text = goal.description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = "${Fmt.rp(goal.savedAmount)} dari ${Fmt.rp(goal.targetAmount)}",
                 style = MaterialTheme.typography.labelSmall,

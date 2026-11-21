@@ -17,7 +17,7 @@ Terakhir diperbarui: 21 November 2026 · versi 1.4.1 (`versionCode` 5).
 |---|---|---|
 | P0 | Keandalan data & rasa aman | feedback aksi, rotasi form, error load, audit saldo |
 | P1 | Efisiensi input harian | edit/hapus transaksi, backdate, reminder backup, i18n |
-| P2 | Skala & distribusi | migrasi DB, UI test, keystore rilis, tablet/dark mode |
+| P2 | Skala & distribusi | migrasi DB, UI test, keystore rilis, tablet |
 
 ---
 
@@ -28,6 +28,16 @@ Terakhir diperbarui: 21 November 2026 · versi 1.4.1 (`versionCode` 5).
 - [x] **Snapshot otomatis** saat bulan berganti; `manual` tidak pernah ditimpa, bisa dikembalikan
   ke otomatis. Database naik ke skema v2 (`source`), backup v2 (v1 masih bisa diimpor).
 - [x] Error state + "Try again" saat database gagal dibuka.
+
+## Selesai di 1.4.1
+
+- [x] Pengaturan tampilan **Sistem / Terang / Gelap**, tersimpan lokal; warna semantik
+  mengikuti pilihan aplikasi, bukan hanya tema sistem.
+- [x] **Deskripsi target** opsional: skema v5, form tambah/edit, tampil di kartu Home dan
+  Pengaturan, ikut backup v6 (backup lama v1–v5 tetap diterima).
+- [x] Tombol Salin di Aktivitas dipindah ke sisi nominal, ikon "+" kartu Aksi Cepat dihapus,
+  biaya global ikut backup.
+- [x] Perbaikan konfirmasi impor: URI file tidak lagi terhapus sebelum `importBackup` dijalankan.
 
 ## Selesai di 1.4
 

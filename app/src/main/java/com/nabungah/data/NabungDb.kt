@@ -7,10 +7,11 @@ import android.database.sqlite.SQLiteOpenHelper
 /**
  * Local schema. Every migration is additive and replayable from any older version:
  * v2 added snapshot sources, v3 added the transfer log, v4 added wallet starting
- * balances plus stricter CHECK constraints and repaired transaction months.
+ * balances plus stricter CHECK constraints and repaired transaction months, v5 added
+ * goal descriptions.
  */
 class NabungDb(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "nabungah.db", null, 4) {
+    SQLiteOpenHelper(context.applicationContext, "nabungah.db", null, 5) {
 
     init {
         // WAL journal mode (the platform's supported way to set it).
@@ -70,6 +71,7 @@ class NabungDb(context: Context) :
             CREATE TABLE goal (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 title         TEXT    NOT NULL,
+                description   TEXT    NOT NULL DEFAULT '',
                 target_amount INTEGER NOT NULL CHECK (target_amount > 0),
                 saved_amount  INTEGER NOT NULL DEFAULT 0 CHECK (saved_amount >= 0),
                 status        TEXT    NOT NULL DEFAULT 'in_progress'
@@ -198,6 +200,10 @@ class NabungDb(context: Context) :
             )
             db.execSQL("DROP TABLE month_snapshot")
             db.execSQL("ALTER TABLE month_snapshot_v4 RENAME TO month_snapshot")
+        }
+        // v5: goals carry an optional free-form description.
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE goal ADD COLUMN description TEXT NOT NULL DEFAULT ''")
         }
     }
 }

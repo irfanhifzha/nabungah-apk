@@ -5,22 +5,45 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Semantic colors flip with the system theme. Values are composable getters so no
-// screen needs to know which scheme is active.
+/** User-facing appearance choice; persisted locally, not part of financial backups. */
+enum class ThemeMode(val storageValue: String, val label: String) {
+    SYSTEM("system", "Sistem"),
+    LIGHT("light", "Terang"),
+    DARK("dark", "Gelap"),
+    ;
+
+    companion object {
+        fun fromStorage(value: String?): ThemeMode =
+            entries.firstOrNull { it.storageValue == value } ?: SYSTEM
+    }
+}
+
+fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
+// Semantic colors flip with the selected app theme. Values are composable getters so
+// no screen needs to know which scheme is active.
 val IncomeGreen: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF4ADE80) else Color(0xFF15803D)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFF4ADE80) else Color(0xFF15803D)
 val ExpenseRed: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF87171) else Color(0xFFB91C1C)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFFF87171) else Color(0xFFB91C1C)
 val Muted: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFFA8B3B0) else Color(0xFF6B7280)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFFA8B3B0) else Color(0xFF6B7280)
 val CanvasBg: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0B1211) else Color(0xFFF6F7F8)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFF0B1211) else Color(0xFFF6F7F8)
 val StatusOrange: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFBBF24) else Color(0xFFD97706)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFFFBBF24) else Color(0xFFD97706)
 val CardBorder: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF2A3A36) else Color(0xFFE6E8EB)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFF2A3A36) else Color(0xFFE6E8EB)
 
 // Dashboard accents
 val HeroTop = Color(0xFF0F766E)
@@ -29,11 +52,11 @@ val OnHeroMuted = Color(0xFFB8DEDA)
 val HeroIncome = Color(0xFFBBF7D0)
 val HeroExpense = Color(0xFFFECACA)
 val IncomeTint: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF10271C) else Color(0xFFECF8F0)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFF10271C) else Color(0xFFECF8F0)
 val ExpenseTint: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF2A1618) else Color(0xFFFDEFEF)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFF2A1618) else Color(0xFFFDEFEF)
 val SoftTeal: Color
-    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF143A35) else Color(0xFFE6F4F1)
+    @Composable get() = if (LocalDarkTheme.current) Color(0xFF143A35) else Color(0xFFE6F4F1)
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFF0F766E),
@@ -70,9 +93,12 @@ private val DarkColors = darkColorScheme(
 )
 
 @Composable
-fun NabungTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
-        content = content,
-    )
+fun NabungTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val dark = mode.isDark(isSystemInDarkTheme())
+    CompositionLocalProvider(LocalDarkTheme provides dark) {
+        MaterialTheme(
+            colorScheme = if (dark) DarkColors else LightColors,
+            content = content,
+        )
+    }
 }

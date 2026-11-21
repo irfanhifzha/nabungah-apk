@@ -2,9 +2,11 @@ package com.nabungah
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
@@ -16,6 +18,7 @@ import com.nabungah.ui.CanvasBg
 import com.nabungah.ui.Dashboard
 import com.nabungah.ui.MainViewModel
 import com.nabungah.ui.NabungTheme
+import com.nabungah.ui.isDark
 
 class MainActivity : ComponentActivity() {
 
@@ -34,7 +37,21 @@ class MainActivity : ComponentActivity() {
         // Compose initialization instead of starting after the first frame.
         val viewModel = vm
         setContent {
-            NabungTheme {
+            val dark = viewModel.themeMode.isDark(isSystemInDarkTheme())
+            LaunchedEffect(dark) {
+                // Status/navigation icons must follow the in-app choice, not only the system.
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.TRANSPARENT,
+                    ) { dark },
+                    navigationBarStyle = SystemBarStyle.auto(
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.TRANSPARENT,
+                    ) { dark },
+                )
+            }
+            NabungTheme(mode = viewModel.themeMode) {
                 LaunchedEffect(viewModel.loaded) {
                     // Report the moment the dashboard is actually interactive, not just
                     // the first (empty) frame.

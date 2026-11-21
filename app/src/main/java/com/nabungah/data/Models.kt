@@ -39,6 +39,7 @@ data class QuickAction(
 data class Goal(
     val id: Long,
     val title: String,
+    val description: String = "",
     val targetAmount: Long,
     val savedAmount: Long,
     val status: String,

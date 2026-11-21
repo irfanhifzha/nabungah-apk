@@ -40,6 +40,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var event by mutableStateOf<UiEvent?>(null)
         private set
 
+    var themeMode by mutableStateOf(ThemeMode.fromStorage(repo.themeMode()))
+        private set
+
+    fun updateThemeMode(mode: ThemeMode) {
+        repo.saveThemeMode(mode.storageValue)
+        themeMode = mode
+    }
+
     fun consumeEvent(id: Long) {
         if (event?.id == id) event = null
     }
@@ -174,8 +182,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteAllQuickActions(onError: (String) -> Unit = {}) =
         write(onError, successMessage = "Semua aksi cepat dihapus") { it.deleteAllQuickActions() }
 
-    fun addGoal(title: String, target: Long, onError: (String) -> Unit, onDone: () -> Unit) =
-        write(onError, onDone, "Target dibuat") { it.addGoal(title, target) }
+    fun addGoal(
+        title: String,
+        target: Long,
+        description: String,
+        onError: (String) -> Unit,
+        onDone: () -> Unit,
+    ) = write(onError, onDone, "Target dibuat") { it.addGoal(title, target, description) }
 
     fun updateGoal(
         id: Long,
@@ -183,10 +196,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         target: Long,
         saved: Long,
         status: String,
+        description: String,
         onError: (String) -> Unit,
         onDone: () -> Unit,
     ) = write(onError, onDone, "Target diperbarui") {
-        it.updateGoal(id, title, target, saved, status)
+        it.updateGoal(id, title, target, saved, status, description)
     }
 
     fun deleteGoal(id: Long, onDone: () -> Unit = {}) =
