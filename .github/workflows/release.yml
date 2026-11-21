@@ -1,0 +1,66 @@
+name: Release APK
+
+# Runs when a version tag is pushed (`git push origin v1.3`), or manually from the Actions tab.
+# No tag is created by this workflow.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.NABUNGAH_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nabungah-release.jks"
+            echo "NABUNGAH_KEYSTORE_PATH=$RUNNER_TEMP/nabungah-release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::NABUNGAH_KEYSTORE_BASE64 is not set; the APK will be debug-signed."
+          fi
+
+      - name: Build release APK
+        env:
+          NABUNGAH_KEYSTORE_PASSWORD: ${{ secrets.NABUNGAH_KEYSTORE_PASSWORD }}
+          NABUNGAH_KEY_ALIAS: ${{ secrets.NABUNGAH_KEY_ALIAS }}
+          NABUNGAH_KEY_PASSWORD: ${{ secrets.NABUNGAH_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --console=plain
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nabungah-release
+          path: app/build/outputs/apk/release/nabungah-release.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/nabungah-release.apk
+          generate_release_notes: true

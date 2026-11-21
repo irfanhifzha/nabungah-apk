@@ -1,14 +1,19 @@
 package com.nabungah.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,12 +55,27 @@ fun TransactionRow(trx: Trx, walletName: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
+            .appCard()
             .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 4.dp),
     ) {
         Row {
+            val accent = if (trx.type == "income") IncomeGreen else ExpenseRed
+            Box(
+                modifier = Modifier
+                    .padding(top = 2.dp, end = 10.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (trx.type == "income") Icons.Default.KeyboardArrowUp
+                    else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -99,9 +119,7 @@ fun SnapshotRow(snapshot: Snapshot) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
+            .appCard()
             .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,7 +130,7 @@ fun SnapshotRow(snapshot: Snapshot) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = if (snapshot.isManual) "Manual" else "Auto",
+                text = if (snapshot.isManual) "Manual" else "Otomatis",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (snapshot.isManual) StatusOrange else IncomeGreen,
                 modifier = Modifier.padding(end = 2.dp),
@@ -124,12 +142,12 @@ fun SnapshotRow(snapshot: Snapshot) {
             modifier = Modifier.padding(top = 6.dp, end = 8.dp, bottom = 8.dp),
         )
         Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 6.dp)) {
-            AmountRow("Income", snapshot.totalIncome, IncomeGreen, prefix = "+ ")
-            AmountRow("Expense", snapshot.totalExpense, ExpenseRed, prefix = "- ")
-            AmountRow("Balance", snapshot.totalBalance, MaterialTheme.colorScheme.onSurface)
+            AmountRow("Pemasukan", snapshot.totalIncome, IncomeGreen, prefix = "+ ")
+            AmountRow("Pengeluaran", snapshot.totalExpense, ExpenseRed, prefix = "- ")
+            AmountRow("Saldo", snapshot.totalBalance, MaterialTheme.colorScheme.onSurface)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Fee ${Fmt.feePercentLabel(snapshot.feePercent)}%",
+                    text = "Biaya ${Fmt.feePercentLabel(snapshot.feePercent)}%",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Muted,
                     modifier = Modifier.weight(1f),
@@ -141,7 +159,7 @@ fun SnapshotRow(snapshot: Snapshot) {
                 )
             }
             Text(
-                text = "Updated ${Fmt.timestamp(snapshot.updatedAt)}",
+                text = "Diperbarui ${Fmt.timestamp(snapshot.updatedAt)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
             )

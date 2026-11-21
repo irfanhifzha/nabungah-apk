@@ -99,9 +99,9 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             onError = { message = it },
             onDone = {
                 message = if (isCurrentMonth) {
-                    "This month is live again; it will be saved automatically next month."
+                    "Bulan ini kembali langsung; nanti tersimpan otomatis saat bulan berganti."
                 } else {
-                    "Automatic report refreshed for ${Fmt.monthLabel(month)}."
+                    "Laporan otomatis diperbarui untuk ${Fmt.monthLabel(month)}."
                 }
             },
         )
@@ -115,12 +115,12 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         item {
             Column {
                 Text(
-                    text = "Review",
+                    text = "Laporan",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Monthly report from your transactions, plus the fee you should set aside.",
+                    text = "Laporan bulanan dari transaksimu, plus biaya yang perlu disisihkan.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -133,10 +133,10 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusChip(
                     label = when {
-                        isCurrentMonth -> "Running month"
+                        isCurrentMonth -> "Bulan berjalan"
                         isManual -> "Manual"
-                        isAuto -> "Automatic"
-                        else -> "Not saved"
+                        isAuto -> "Otomatis"
+                        else -> "Belum disimpan"
                     },
                     color = when {
                         isCurrentMonth -> MaterialTheme.colorScheme.primary
@@ -146,8 +146,8 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = snapshot?.let { "Saved ${Fmt.timestamp(it.updatedAt)}" }
-                        ?: if (isCurrentMonth) "Live, not saved yet" else "Not saved",
+                    text = snapshot?.let { "Disimpan ${Fmt.timestamp(it.updatedAt)}" }
+                        ?: if (isCurrentMonth) "Langsung, belum disimpan" else "Belum disimpan",
                     style = MaterialTheme.typography.labelSmall,
                     color = Muted,
                 )
@@ -155,32 +155,32 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
-            SectionCard(title = "Month report") {
+            SectionCard(title = "Laporan bulan ini") {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatTile(
-                        label = "Income",
+                        label = "Pemasukan",
                         value = "+ " + Fmt.rp(report.income),
                         color = IncomeGreen,
                         modifier = Modifier.weight(1f),
                     )
                     StatTile(
-                        label = "Expense",
+                        label = "Pengeluaran",
                         value = "- " + Fmt.rp(report.expense),
                         color = ExpenseRed,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 Spacer(Modifier.height(10.dp))
-                AmountRow("Net", report.net, if (report.net >= 0) IncomeGreen else ExpenseRed)
-                AmountRow("Balance at month end", report.balance, MaterialTheme.colorScheme.onSurface)
+                AmountRow("Selisih", report.net, if (report.net >= 0) IncomeGreen else ExpenseRed)
+                AmountRow("Saldo akhir bulan", report.balance, MaterialTheme.colorScheme.onSurface)
                 AmountRow(
-                    "Transactions",
+                    "Transaksi",
                     report.count.toLong(),
                     MaterialTheme.colorScheme.onSurface,
                     money = false,
                 )
                 AmountRow(
-                    "Average expense",
+                    "Rata-rata pengeluaran",
                     report.averageExpense,
                     MaterialTheme.colorScheme.onSurface,
                 )
@@ -190,7 +190,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                     Text(
-                        text = "Biggest spending",
+                        text = "Pengeluaran terbesar",
                         style = MaterialTheme.typography.labelSmall,
                         color = Muted,
                         modifier = Modifier.padding(bottom = 2.dp),
@@ -203,10 +203,10 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
-            SectionCard(title = "Fee for the month") {
+            SectionCard(title = "Biaya bulan ini") {
                 Text(
-                    text = "Informational only. The fee is what you should set aside from income this " +
-                        "month; it is never deducted from a wallet.",
+                    text = "Hanya informasi. Biaya adalah bagian pemasukan bulan ini yang perlu " +
+                        "disisihkan; tidak pernah dipotong dari dompet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -215,7 +215,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     OutlinedTextField(
                         value = fee,
                         onValueChange = { fee = Fmt.sanitizeFeeInput(it) },
-                        label = { Text("Fee %") },
+                        label = { Text("Biaya %") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.width(130.dp),
@@ -223,7 +223,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Fee on income",
+                            text = "Biaya dari pemasukan",
                             style = MaterialTheme.typography.labelSmall,
                             color = Muted,
                         )
@@ -233,35 +233,48 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "${Fmt.feePercentLabel(report.feePercent)}% of ${Fmt.rp(report.income)}",
+                            text = "${Fmt.feePercentLabel(report.feePercent)}% dari ${Fmt.rp(report.income)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Muted,
                         )
                     }
                 }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = CardBorder)
+                Spacer(Modifier.height(4.dp))
+                AmountRow(
+                    "Saldo jika fee disisihkan",
+                    report.balanceAfterFee,
+                    MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Perkiraan; saldo dompet tidak benar-benar dikurangi.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                )
             }
         }
 
         item {
-            SectionCard(title = "Save or edit") {
+            SectionCard(title = "Simpan atau edit") {
                 if (isCurrentMonth) {
                     Text(
-                        text = "This month keeps updating live. When the month ends, it is saved " +
-                            "automatically and appears in Saved months.",
+                        text = "Bulan ini terus diperbarui secara langsung. Saat bulan berakhir, " +
+                            "laporannya disimpan otomatis ke bagian Bulan tersimpan.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Muted,
                     )
                     Spacer(Modifier.height(10.dp))
                 } else if (isAuto) {
                     Text(
-                        text = "Saved automatically from transactions. It only changes when you edit it.",
+                        text = "Disimpan otomatis dari transaksi. Hanya berubah kalau kamu edit manual.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Muted,
                     )
                     Spacer(Modifier.height(10.dp))
                 } else if (isManual) {
                     Text(
-                        text = "This month is frozen with your manual numbers. Automatic updates skip it.",
+                        text = "Bulan ini dikunci dengan angkamu sendiri. Update otomatis akan melewatinya.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Muted,
                     )
@@ -282,22 +295,22 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                 ) {
-                    Text(if (snapshot == null) "Save this month manually" else "Edit report manually")
+                    Text(if (snapshot == null) "Simpan bulan ini secara manual" else "Edit laporan manual")
                 }
 
                 if (isManual) {
                     TextButton(onClick = { resetToAuto() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Switch back to automatic")
+                        Text("Kembalikan ke otomatis")
                     }
                 }
                 if (isAuto && differs) {
                     TextButton(onClick = { resetToAuto() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Refresh automatic report")
+                        Text("Perbarui laporan otomatis")
                     }
                 }
                 if (isAuto && differs) {
                     Text(
-                        text = "The saved snapshot differs from the transactions shown above.",
+                        text = "Snapshot tersimpan berbeda dari transaksi di atas.",
                         style = MaterialTheme.typography.labelSmall,
                         color = StatusOrange,
                     )
@@ -315,7 +328,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
 
         item {
             Text(
-                text = "Saved months",
+                text = "Bulan tersimpan",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 4.dp),
@@ -325,9 +338,9 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         if (data.snapshots.isEmpty()) {
             item {
                 EmptyState(
-                    title = "No saved months yet",
-                    body = "Finished months are saved automatically the first time the app opens in " +
-                        "a new month. You can also save one manually above.",
+                    title = "Belum ada bulan tersimpan",
+                    body = "Bulan yang sudah selesai disimpan otomatis saat aplikasi pertama kali " +
+                        "dibuka di bulan baru. Kamu juga bisa menyimpannya manual di atas.",
                 )
             }
         } else {
@@ -350,14 +363,12 @@ private fun MonthSwitcher(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
+            .appCard()
             .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = { older?.let(onOlder) }, enabled = older != null) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Earlier month")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Bulan sebelumnya")
         }
         Column(
             modifier = Modifier.weight(1f),
@@ -370,13 +381,13 @@ private fun MonthSwitcher(
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "$count transaction${if (count == 1) "" else "s"}",
+                text = "$count transaksi",
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
             )
         }
         IconButton(onClick = { newer?.let(onNewer) }, enabled = newer != null) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later month")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Bulan berikutnya")
         }
     }
 }

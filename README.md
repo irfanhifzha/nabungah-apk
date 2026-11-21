@@ -11,7 +11,7 @@ the implementation that satisfies it.
 
 | Item | Value |
 |---|---|
-| Language / UI | Kotlin 2.2.10, Jetpack Compose (Material 3) |
+| Language / UI | Kotlin 2.2.10, Jetpack Compose (Material 3); UI copy and formatting in Indonesian (`id-ID`) |
 | Persistence | Plain `SQLiteOpenHelper` + hand-written SQL (no Room, no DAO codegen) |
 | Screens | One activity; four tabs (Home, Activity, Review, Settings) + modal bottom sheets |
 | Architecture | Activity → Compose shell → `MainViewModel` → `Repo` → SQLite |
@@ -20,7 +20,7 @@ the implementation that satisfies it.
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Version | 1.2 (`versionCode` 2), schema v2 |
+| Version | 1.3 (`versionCode` 3), schema v2 |
 | Release APK | ~1.3 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
@@ -257,8 +257,8 @@ Dashboard (Scaffold)
 ├── bottomBar   NavigationBar: Home | Activity | Review | Settings
 ├── FAB         "Add" → NewTransaction (Home and Activity only)
 └── content (by tab)
-    ├── HomeTab       header + offline pill, hero balance (month in/out), Add/Transfer/Goal,
-    │                 quick-action strip, wallets, savings goals, last 5 transactions
+    ├── HomeTab       header, hero balance (month in/out), Add/Transfer/Goal, large quick-action
+    │                 cards, wallet cards, savings goal cards, last 5 transactions
     ├── TransactionsTab  search field, month/type pickers, record+totals line, day-grouped rows,
     │                 "Show more" (20 at a time), empty/filtered empty states
     ├── ReviewTab     month stepper (defaults to current month), live report (income, expense,

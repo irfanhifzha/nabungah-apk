@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -14,9 +15,24 @@ android {
         applicationId = "com.nabungah"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.2"
+        versionCode = 3
+        versionName = "1.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // CI supplies a release keystore through env vars; local builds without it fall back to
+    // the debug key so `assembleRelease` stays installable.
+    signingConfigs {
+        val keystorePath = System.getenv("NABUNGAH_KEYSTORE_PATH")
+        val keystoreFile = keystorePath?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile }
+        if (keystoreFile != null && keystoreFile.exists()) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = System.getenv("NABUNGAH_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("NABUNGAH_KEY_ALIAS")
+                keyPassword = System.getenv("NABUNGAH_KEY_PASSWORD") ?: storePassword
+            }
+        }
     }
 
     buildTypes {
@@ -27,9 +43,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Signed with the debug key so the local release APK is installable.
-            // Replace with a real keystore before distributing.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 

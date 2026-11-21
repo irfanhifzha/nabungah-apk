@@ -42,22 +42,22 @@ import kotlinx.coroutines.delay
 // ---------------------------------------------------------------- clipboard
 
 fun trxCopyText(t: Trx, walletName: String): String = buildString {
-    append("*🧾 Transaksi Title: ${t.title}*\n")
-    append("💰 Amount: ${Fmt.rp(t.amount)}\n")
-    append("📌 Type: ${t.type}\n")
-    append("🏦 Wallet: $walletName\n")
-    append("🗓️ Date: ${Fmt.timestamp(t.occurredAt)}\n")
-    append("📝 Note: ${t.note.ifBlank { "-" }}")
+    append("*🧾 Transaksi: ${t.title}*\n")
+    append("💰 Nominal: ${Fmt.rp(t.amount)}\n")
+    append("📌 Tipe: ${if (t.type == "income") "Pemasukan" else "Pengeluaran"}\n")
+    append("🏦 Dompet: $walletName\n")
+    append("🗓️ Tanggal: ${Fmt.timestamp(t.occurredAt)}\n")
+    append("📝 Catatan: ${t.note.ifBlank { "-" }}")
 }
 
 fun snapshotCopyText(s: Snapshot): String = buildString {
-    append("*📅 Data Statistik Bulan: ${s.month}*\n")
-    append("🔁 Source: ${if (s.isManual) "Manual" else "Automatic"}\n")
-    append("💰 Total Income: ${Fmt.rp(s.totalIncome)}\n")
-    append("💸 Total Expense: ${Fmt.rp(s.totalExpense)}\n")
-    append("💼 Total Balance: ${Fmt.rp(s.totalBalance)}\n")
-    append("💳 Fee (${Fmt.feePercentLabel(s.feePercent)}%): ${Fmt.rp(s.feeExpense)}\n")
-    append("🕒 Updated: ${Fmt.timestamp(s.updatedAt)}")
+    append("*📅 Statistik Bulan: ${s.month}*\n")
+    append("🔁 Sumber: ${if (s.isManual) "Manual" else "Otomatis"}\n")
+    append("💰 Total Pemasukan: ${Fmt.rp(s.totalIncome)}\n")
+    append("💸 Total Pengeluaran: ${Fmt.rp(s.totalExpense)}\n")
+    append("💼 Total Saldo: ${Fmt.rp(s.totalBalance)}\n")
+    append("💳 Biaya (${Fmt.feePercentLabel(s.feePercent)}%): ${Fmt.rp(s.feeExpense)}\n")
+    append("🕒 Diperbarui: ${Fmt.timestamp(s.updatedAt)}")
 }
 
 private fun copyToClipboard(context: Context, label: String, text: String) {
@@ -83,7 +83,7 @@ fun CopyButton(text: String, modifier: Modifier = Modifier) {
         modifier = modifier,
     ) {
         Text(
-            text = if (copied) "✓ Copied" else "Copy",
+            text = if (copied) "✓ Tersalin" else "Salin",
             style = MaterialTheme.typography.labelMedium,
             color = if (copied) IncomeGreen else Muted,
             fontWeight = FontWeight.SemiBold,
@@ -128,12 +128,12 @@ private fun TypeSelector(type: String, onChange: (String) -> Unit) {
         FilterChip(
             selected = type == "expense",
             onClick = { onChange("expense") },
-            label = { Text("Expense (-)") },
+            label = { Text("Pengeluaran (-)") },
         )
         FilterChip(
             selected = type == "income",
             onClick = { onChange("income") },
-            label = { Text("Income (+)") },
+            label = { Text("Pemasukan (+)") },
         )
     }
 }
@@ -159,12 +159,12 @@ fun AddWalletSheet(vm: MainViewModel, onClose: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("Add Wallet")
-        SheetNote("Enter the balance this wallet holds right now. New wallets do not start at 0.")
-        LabeledTextField(value = name, onValueChange = { name = it }, label = "Wallet Name")
-        MoneyField(label = "Starting Balance", digits = balance, onDigitsChange = { balance = it })
+        SheetTitle("Tambah Dompet")
+        SheetNote("Isi saldo dompet saat ini. Dompet baru tidak harus mulai dari 0.")
+        LabeledTextField(value = name, onValueChange = { name = it }, label = "Nama Dompet")
+        MoneyField(label = "Saldo Awal", digits = balance, onDigitsChange = { balance = it })
         FormError(error)
-        SaveButton("Save Wallet") {
+        SaveButton("Simpan Dompet") {
             vm.addWallet(
                 name = name,
                 balance = Fmt.digitsToLong(balance),
@@ -192,12 +192,12 @@ fun NewTransactionSheet(
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("New Transaction")
-        LabeledTextField(value = title, onValueChange = { title = it }, label = "Title")
-        MoneyField(label = "Amount", digits = amount, onDigitsChange = { amount = it })
+        SheetTitle("Transaksi Baru")
+        LabeledTextField(value = title, onValueChange = { title = it }, label = "Judul")
+        MoneyField(label = "Nominal", digits = amount, onDigitsChange = { amount = it })
         TypeSelector(type = type, onChange = { type = it })
         PickerField(
-            label = "Wallet",
+            label = "Dompet",
             selectedLabel = wallets.firstOrNull { it.id == walletId }?.name ?: "",
             options = wallets.map { it.id to it.name },
             onSelect = { walletId = it },
@@ -205,12 +205,12 @@ fun NewTransactionSheet(
         LabeledTextField(
             value = note,
             onValueChange = { note = it },
-            label = "Note (optional)",
+            label = "Catatan (opsional)",
             singleLine = false,
             minLines = 2,
         )
         FormError(error)
-        SaveButton("Save Transaction") {
+        SaveButton("Simpan Transaksi") {
             vm.addTransaction(
                 title = title,
                 amount = Fmt.digitsToLong(amount),
@@ -234,13 +234,13 @@ fun AddQuickActionSheet(vm: MainViewModel, onClose: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("New Quick Action")
-        SheetNote("A template for the transaction form. It never moves money by itself.")
-        LabeledTextField(value = title, onValueChange = { title = it }, label = "Title")
-        MoneyField(label = "Amount", digits = amount, onDigitsChange = { amount = it })
+        SheetTitle("Aksi Cepat Baru")
+        SheetNote("Template untuk form transaksi. Tidak pernah memindahkan uang sendiri.")
+        LabeledTextField(value = title, onValueChange = { title = it }, label = "Judul")
+        MoneyField(label = "Nominal", digits = amount, onDigitsChange = { amount = it })
         TypeSelector(type = type, onChange = { type = it })
         FormError(error)
-        SaveButton("Save Quick Action") {
+        SaveButton("Simpan Aksi Cepat") {
             vm.addQuickAction(
                 title = title,
                 amount = Fmt.digitsToLong(amount),
@@ -261,12 +261,12 @@ fun AddGoalSheet(vm: MainViewModel, onClose: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("Create Goal")
-        SheetNote("Goals are not connected to wallets. Move the money manually.")
-        LabeledTextField(value = title, onValueChange = { title = it }, label = "Goal Title")
-        MoneyField(label = "Target Amount", digits = target, onDigitsChange = { target = it })
+        SheetTitle("Buat Target")
+        SheetNote("Target tidak terhubung ke dompet. Pindahkan uangnya secara manual.")
+        LabeledTextField(value = title, onValueChange = { title = it }, label = "Nama Target")
+        MoneyField(label = "Jumlah Target", digits = target, onDigitsChange = { target = it })
         FormError(error)
-        SaveButton("Create Goal") {
+        SaveButton("Buat Target") {
             vm.addGoal(
                 title = title,
                 target = Fmt.digitsToLong(target),
@@ -287,16 +287,16 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
     var confirmRemove by remember { mutableStateOf(false) }
 
     SheetColumn {
-        SheetTitle("Edit Goal")
-        LabeledTextField(value = title, onValueChange = { title = it }, label = "Goal Title")
-        MoneyField(label = "Target Amount", digits = target, onDigitsChange = { target = it })
-        MoneyField(label = "Saved Amount", digits = saved, onDigitsChange = { saved = it })
+        SheetTitle("Edit Target")
+        LabeledTextField(value = title, onValueChange = { title = it }, label = "Nama Target")
+        MoneyField(label = "Jumlah Target", digits = target, onDigitsChange = { target = it })
+        MoneyField(label = "Sudah Terkumpul", digits = saved, onDigitsChange = { saved = it })
         Text("Status", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
-                "in_progress" to "In Progress",
-                "completed" to "Completed",
-                "cancelled" to "Cancelled",
+                "in_progress" to "Berjalan",
+                "completed" to "Selesai",
+                "cancelled" to "Dibatalkan",
             ).forEach { (value, label) ->
                 FilterChip(
                     selected = status == value,
@@ -306,7 +306,7 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
             }
         }
         FormError(error)
-        SaveButton("Save Changes") {
+        SaveButton("Simpan Perubahan") {
             vm.updateGoal(
                 id = goal.id,
                 title = title,
@@ -318,15 +318,15 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
             )
         }
         TextButton(onClick = { confirmRemove = true }) {
-            Text("Remove Goal", color = MaterialTheme.colorScheme.error)
+            Text("Hapus Target", color = MaterialTheme.colorScheme.error)
         }
     }
 
     if (confirmRemove) {
         ConfirmDialog(
-            title = "Remove goal?",
-            message = "\"${goal.title}\" will be deleted. Wallet balances are not affected.",
-            confirmLabel = "Remove",
+            title = "Hapus target?",
+            message = "\"${goal.title}\" akan dihapus. Saldo dompet tidak terpengaruh.",
+            confirmLabel = "Hapus",
             onConfirm = { vm.deleteGoal(goal.id, onDone = onClose) },
             onDismiss = { confirmRemove = false },
         )
@@ -345,30 +345,30 @@ fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit)
 
     fun localError(): String? {
         val value = Fmt.digitsToLong(amount)
-        if (value <= 1000) return "Amount must be greater than 1.000"
-        if (fromId == null || toId == null) return "Please select both wallets"
-        if (fromId == toId) return "Wallet asal and tujuan cannot be the same"
+        if (value <= 1000) return "Nominal harus lebih dari 1.000"
+        if (fromId == null || toId == null) return "Pilih kedua dompet"
+        if (fromId == toId) return "Dompet asal dan tujuan tidak boleh sama"
         return null
     }
 
     SheetColumn {
         SheetTitle("Tukar Uang")
-        SheetNote("Moves money between wallets. Not income, not expense, and no record is created.")
-        MoneyField(label = "Amount", digits = amount, onDigitsChange = { amount = it })
+        SheetNote("Memindahkan uang antar dompet. Bukan pemasukan, bukan pengeluaran, tanpa catatan baru.")
+        MoneyField(label = "Nominal", digits = amount, onDigitsChange = { amount = it })
         PickerField(
-            label = "From Wallet",
+            label = "Dari Dompet",
             selectedLabel = wallets.firstOrNull { it.id == fromId }?.name ?: "",
             options = wallets.map { it.id to it.name },
             onSelect = { fromId = it },
         )
         PickerField(
-            label = "To Wallet",
+            label = "Ke Dompet",
             selectedLabel = wallets.firstOrNull { it.id == toId }?.name ?: "",
             options = wallets.map { it.id to it.name },
             onSelect = { toId = it },
         )
         FormError(error)
-        SaveButton("Move Money") {
+        SaveButton("Pindahkan Uang") {
             val local = localError()
             if (local != null) error = local else confirm = true
         }
@@ -378,9 +378,9 @@ fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit)
         val fromName = wallets.firstOrNull { it.id == fromId }?.name ?: ""
         val toName = wallets.firstOrNull { it.id == toId }?.name ?: ""
         ConfirmDialog(
-            title = "Confirm transfer",
-            message = "Move ${Fmt.rp(Fmt.digitsToLong(amount))} from $fromName to $toName?",
-            confirmLabel = "Move",
+            title = "Konfirmasi transfer",
+            message = "Pindahkan ${Fmt.rp(Fmt.digitsToLong(amount))} dari $fromName ke $toName?",
+            confirmLabel = "Pindahkan",
             destructive = false,
             onConfirm = {
                 vm.transfer(
@@ -418,23 +418,23 @@ fun EditReportSheet(
     val feeExpense = Fmt.feeExpense(Fmt.digitsToLong(income), Fmt.parseFee(feePercent))
 
     SheetColumn {
-        SheetTitle("Edit ${Fmt.monthLabel(month)}")
+        SheetTitle("Edit laporan ${Fmt.monthLabel(month)}")
         SheetNote(
-            "Saving here freezes the month with your own numbers. Automatic updates will skip " +
-                "it until you switch it back to automatic in Review.",
+            "Menyimpan di sini mengunci bulan dengan angkamu sendiri. Update otomatis akan " +
+                "melewatinya sampai kamu kembalikan ke otomatis di Laporan.",
         )
         Text(
-            text = "Month: ${Fmt.monthLabel(month)}",
+            text = "Bulan: ${Fmt.monthLabel(month)}",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        MoneyField(label = "Total Balance", digits = balance, onDigitsChange = { balance = it })
-        MoneyField(label = "Total Income", digits = income, onDigitsChange = { income = it })
-        MoneyField(label = "Total Expense", digits = expense, onDigitsChange = { expense = it })
+        MoneyField(label = "Total Saldo", digits = balance, onDigitsChange = { balance = it })
+        MoneyField(label = "Total Pemasukan", digits = income, onDigitsChange = { income = it })
+        MoneyField(label = "Total Pengeluaran", digits = expense, onDigitsChange = { expense = it })
         OutlinedTextField(
             value = feePercent,
             onValueChange = { feePercent = Fmt.sanitizeFeeInput(it) },
-            label = { Text("Fee %") },
+            label = { Text("Biaya %") },
             singleLine = true,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                 keyboardType = KeyboardType.Decimal,
@@ -442,20 +442,20 @@ fun EditReportSheet(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            text = "Fee on income: ${Fmt.rp(feeExpense)}",
+            text = "Biaya dari pemasukan: ${Fmt.rp(feeExpense)}",
             style = MaterialTheme.typography.bodySmall,
             color = Muted,
         )
         FormError(error)
-        SaveButton("Save as manual") { confirm = true }
+        SaveButton("Simpan sebagai manual") { confirm = true }
     }
 
     if (confirm) {
         ConfirmDialog(
-            title = "Save manual report?",
-            message = "${Fmt.monthLabel(month)} will be marked manual. Automatic month-end " +
-                "updates will not change it again.",
-            confirmLabel = "Save",
+            title = "Simpan laporan manual?",
+            message = "${Fmt.monthLabel(month)} akan ditandai manual. Update otomatis akhir bulan " +
+                "tidak akan mengubahnya lagi.",
+            confirmLabel = "Simpan",
             destructive = false,
             onConfirm = {
                 vm.upsertSnapshot(
@@ -484,9 +484,9 @@ fun DeleteWalletsSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> 
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("Delete Wallets")
-        SheetNote("Deleting a wallet does not move its balance. Its transactions stay in history and show \"Unknown Wallet\".")
-        if (wallets.isEmpty()) EmptyText("No wallet yet")
+        SheetTitle("Hapus Dompet")
+        SheetNote("Menghapus dompet tidak memindahkan saldonya. Transaksinya tetap ada dan tampil sebagai \"Dompet tidak dikenal\".")
+        if (wallets.isEmpty()) EmptyText("Belum ada dompet")
         wallets.forEach { wallet ->
             SelectableRow(
                 title = wallet.name,
@@ -497,15 +497,15 @@ fun DeleteWalletsSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> 
         FormError(error)
         if (wallets.isNotEmpty()) {
             TextButton(onClick = { pendingAll = true }) {
-                Text("Delete All Wallets", color = MaterialTheme.colorScheme.error)
+                Text("Hapus Semua Dompet", color = MaterialTheme.colorScheme.error)
             }
         }
     }
 
     pending?.let { wallet ->
         ConfirmDialog(
-            title = "Delete wallet?",
-            message = "\"${wallet.name}\" will be removed and ${Fmt.rp(wallet.balance)} leaves Total Balance. The money is not moved.",
+            title = "Hapus dompet?",
+            message = "\"${wallet.name}\" akan dihapus dan ${Fmt.rp(wallet.balance)} keluar dari Total Saldo. Uangnya tidak dipindahkan.",
             onConfirm = {
                 vm.deleteWallet(wallet.id, onError = { error = it })
                 pending = null
@@ -515,9 +515,9 @@ fun DeleteWalletsSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> 
     }
     if (pendingAll) {
         ConfirmDialog(
-            title = "Delete all wallets?",
-            message = "All wallets will be removed. Their balances leave Total Balance and are not moved anywhere.",
-            confirmLabel = "Delete All",
+            title = "Hapus semua dompet?",
+            message = "Semua dompet dihapus. Saldonya keluar dari Total Saldo dan tidak dipindahkan ke mana pun.",
+            confirmLabel = "Hapus Semua",
             onConfirm = {
                 vm.deleteAllWallets(onError = { error = it })
                 pendingAll = false
@@ -539,13 +539,13 @@ fun DeleteTransactionsSheet(
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("Delete Transactions")
-        SheetNote("Deleting a transaction reverses its effect on the wallet, so balances stay consistent.")
-        if (transactions.isEmpty()) EmptyText("No transactions yet")
+        SheetTitle("Hapus Transaksi")
+        SheetNote("Menghapus transaksi membalik efeknya pada dompet, jadi saldo tetap konsisten.")
+        if (transactions.isEmpty()) EmptyText("Belum ada transaksi")
         transactions.forEach { t ->
             SelectableRow(
                 title = t.title,
-                subtitle = "${Fmt.timestamp(t.occurredAt)} · ${walletNames[t.walletId] ?: "Unknown Wallet"}",
+                subtitle = "${Fmt.timestamp(t.occurredAt)} · ${walletNames[t.walletId] ?: "Dompet tidak dikenal"}",
                 trailing = (if (t.type == "income") "+ " else "- ") + Fmt.rp(t.amount),
                 onClick = { pending = t },
             )
@@ -553,15 +553,15 @@ fun DeleteTransactionsSheet(
         FormError(error)
         if (transactions.isNotEmpty()) {
             TextButton(onClick = { pendingAll = true }) {
-                Text("Delete All Transactions", color = MaterialTheme.colorScheme.error)
+                Text("Hapus Semua Transaksi", color = MaterialTheme.colorScheme.error)
             }
         }
     }
 
     pending?.let { t ->
         ConfirmDialog(
-            title = "Delete transaction?",
-            message = "\"${t.title}\" (${Fmt.rp(t.amount)}) will be deleted and its wallet effect reversed.",
+            title = "Hapus transaksi?",
+            message = "\"${t.title}\" (${Fmt.rp(t.amount)}) akan dihapus dan efeknya pada dompet dibalik.",
             onConfirm = {
                 vm.deleteTransaction(t.id)
                 pending = null
@@ -571,9 +571,9 @@ fun DeleteTransactionsSheet(
     }
     if (pendingAll) {
         ConfirmDialog(
-            title = "Delete all transactions?",
-            message = "All ${transactions.size} transactions will be deleted in one step. Wallet balances are adjusted to undo their effects.",
-            confirmLabel = "Delete All",
+            title = "Hapus semua transaksi?",
+            message = "Semua ${transactions.size} transaksi dihapus sekaligus. Saldo dompet disesuaikan untuk membatalkan efeknya.",
+            confirmLabel = "Hapus Semua",
             onConfirm = {
                 vm.deleteAllTransactions()
                 pendingAll = false
@@ -590,12 +590,12 @@ fun DeleteQuickActionsSheet(vm: MainViewModel, actions: List<QuickAction>, onClo
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("Delete Quick Actions")
-        if (actions.isEmpty()) EmptyText("No Quick Actions yet")
+        SheetTitle("Hapus Aksi Cepat")
+        if (actions.isEmpty()) EmptyText("Belum ada aksi cepat")
         actions.forEach { action ->
             SelectableRow(
                 title = action.title,
-                subtitle = action.type.replaceFirstChar { it.uppercase() },
+                subtitle = if (action.type == "income") "Pemasukan" else "Pengeluaran",
                 trailing = (if (action.type == "income") "+ " else "- ") + Fmt.rp(action.amount),
                 onClick = { pending = action },
             )
@@ -603,15 +603,15 @@ fun DeleteQuickActionsSheet(vm: MainViewModel, actions: List<QuickAction>, onClo
         FormError(error)
         if (actions.isNotEmpty()) {
             TextButton(onClick = { pendingAll = true }) {
-                Text("Delete All Quick Actions", color = MaterialTheme.colorScheme.error)
+                Text("Hapus Semua Aksi Cepat", color = MaterialTheme.colorScheme.error)
             }
         }
     }
 
     pending?.let { action ->
         ConfirmDialog(
-            title = "Delete quick action?",
-            message = "\"${action.title}\" will be removed. This never touches transactions or balances.",
+            title = "Hapus aksi cepat?",
+            message = "\"${action.title}\" akan dihapus. Transaksi dan saldo tidak tersentuh.",
             onConfirm = {
                 vm.deleteQuickAction(action.id, onError = { error = it })
                 pending = null
@@ -621,9 +621,9 @@ fun DeleteQuickActionsSheet(vm: MainViewModel, actions: List<QuickAction>, onClo
     }
     if (pendingAll) {
         ConfirmDialog(
-            title = "Delete all quick actions?",
-            message = "All saved quick actions will be removed. Transactions and balances are untouched.",
-            confirmLabel = "Delete All",
+            title = "Hapus semua aksi cepat?",
+            message = "Semua aksi cepat dihapus. Transaksi dan saldo tidak tersentuh.",
+            confirmLabel = "Hapus Semua",
             onConfirm = {
                 vm.deleteAllQuickActions(onError = { error = it })
                 pendingAll = false
@@ -640,13 +640,13 @@ fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: 
     var error by remember { mutableStateOf<String?>(null) }
 
     SheetColumn {
-        SheetTitle("Delete Monthly Data")
-        SheetNote("Snapshots are independent: deleting them never touches transactions or wallets.")
-        if (snapshots.isEmpty()) EmptyText("No monthly snapshots yet")
+        SheetTitle("Hapus Data Bulanan")
+        SheetNote("Snapshot berdiri sendiri: menghapusnya tidak menyentuh transaksi atau dompet.")
+        if (snapshots.isEmpty()) EmptyText("Belum ada snapshot bulanan")
         snapshots.forEach { snapshot ->
             SelectableRow(
                 title = snapshot.month,
-                subtitle = "Updated ${Fmt.timestamp(snapshot.updatedAt)}",
+                subtitle = "Diperbarui ${Fmt.timestamp(snapshot.updatedAt)}",
                 trailing = Fmt.rp(snapshot.totalBalance),
                 onClick = { pending = snapshot },
             )
@@ -654,15 +654,15 @@ fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: 
         FormError(error)
         if (snapshots.isNotEmpty()) {
             TextButton(onClick = { pendingAll = true }) {
-                Text("Delete All Snapshots", color = MaterialTheme.colorScheme.error)
+                Text("Hapus Semua Snapshot", color = MaterialTheme.colorScheme.error)
             }
         }
     }
 
     pending?.let { snapshot ->
         ConfirmDialog(
-            title = "Delete snapshot?",
-            message = "The ${snapshot.month} snapshot will be deleted. Transactions and wallets are untouched.",
+            title = "Hapus snapshot?",
+            message = "Snapshot ${snapshot.month} akan dihapus. Transaksi dan dompet tidak tersentuh.",
             onConfirm = {
                 vm.deleteSnapshot(snapshot.month, onError = { error = it })
                 pending = null
@@ -672,9 +672,9 @@ fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: 
     }
     if (pendingAll) {
         ConfirmDialog(
-            title = "Delete all snapshots?",
-            message = "All monthly snapshots will be deleted. Transactions and wallets are untouched.",
-            confirmLabel = "Delete All",
+            title = "Hapus semua snapshot?",
+            message = "Semua snapshot bulanan akan dihapus. Transaksi dan dompet tidak tersentuh.",
+            confirmLabel = "Hapus Semua",
             onConfirm = {
                 vm.deleteAllSnapshots(onError = { error = it })
                 pendingAll = false

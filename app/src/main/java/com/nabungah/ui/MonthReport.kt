@@ -22,6 +22,9 @@ data class MonthReport(
 ) {
     val net: Long get() = income - expense
     val averageExpense: Long get() = if (count == 0) 0 else expense / count
+
+    /** Preview only: fee is informational and never actually deducted from wallets. */
+    val balanceAfterFee: Long get() = balance - feeExpense
 }
 
 /**

@@ -149,8 +149,8 @@ class Repo(context: Context) {
 
     fun addWallet(name: String, startingBalance: Long) {
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) throw ValidationException("Wallet name is required")
-        if (startingBalance < 0) throw ValidationException("Balance cannot be negative")
+        if (trimmed.isEmpty()) throw ValidationException("Nama dompet wajib diisi")
+        if (startingBalance < 0) throw ValidationException("Saldo tidak boleh negatif")
         db.insertOrThrow(
             "wallet", null,
             ContentValues().apply {
@@ -181,16 +181,16 @@ class Repo(context: Context) {
 
     fun addTransaction(title: String, amount: Long, type: String, walletId: Long?, note: String) {
         val trimmed = title.trim()
-        if (trimmed.isEmpty()) throw ValidationException("Title is required")
-        if (amount <= 0) throw ValidationException("Amount must be greater than 0")
-        if (walletId == null) throw ValidationException("Please select wallet")
+        if (trimmed.isEmpty()) throw ValidationException("Judul wajib diisi")
+        if (amount <= 0) throw ValidationException("Nominal harus lebih dari 0")
+        if (walletId == null) throw ValidationException("Pilih dompet")
 
         db.beginTransaction()
         try {
             val balance = walletBalance(walletId)
-                ?: throw ValidationException("Please select wallet")
+                ?: throw ValidationException("Pilih dompet")
             if (type == "expense" && balance - amount < 0) {
-                throw ValidationException("Insufficient wallet balance")
+                throw ValidationException("Saldo dompet tidak cukup")
             }
             val now = System.currentTimeMillis()
             db.insertOrThrow(
@@ -280,8 +280,8 @@ class Repo(context: Context) {
 
     fun addQuickAction(title: String, amount: Long, type: String) {
         val trimmed = title.trim()
-        if (trimmed.isEmpty()) throw ValidationException("Title is required")
-        if (amount <= 0) throw ValidationException("Amount must be greater than 0")
+        if (trimmed.isEmpty()) throw ValidationException("Judul wajib diisi")
+        if (amount <= 0) throw ValidationException("Nominal harus lebih dari 0")
         val now = System.currentTimeMillis()
         db.insertOrThrow(
             "quick_action", null,
@@ -313,8 +313,8 @@ class Repo(context: Context) {
 
     fun addGoal(title: String, target: Long) {
         val trimmed = title.trim()
-        if (trimmed.isEmpty()) throw ValidationException("Title is required")
-        if (target <= 0) throw ValidationException("Target amount must be greater than 0")
+        if (trimmed.isEmpty()) throw ValidationException("Judul wajib diisi")
+        if (target <= 0) throw ValidationException("Jumlah target harus lebih dari 0")
         val now = System.currentTimeMillis()
         db.insertOrThrow(
             "goal", null,
@@ -332,9 +332,9 @@ class Repo(context: Context) {
 
     fun updateGoal(id: Long, title: String, target: Long, saved: Long, status: String) {
         val trimmed = title.trim()
-        if (trimmed.isEmpty()) throw ValidationException("Title is required")
-        if (target <= 0) throw ValidationException("Target amount must be greater than 0")
-        if (saved < 0) throw ValidationException("Saved amount must be 0 or more")
+        if (trimmed.isEmpty()) throw ValidationException("Judul wajib diisi")
+        if (target <= 0) throw ValidationException("Jumlah target harus lebih dari 0")
+        if (saved < 0) throw ValidationException("Jumlah terkumpul tidak boleh negatif")
         db.update(
             "goal",
             ContentValues().apply {
@@ -356,15 +356,15 @@ class Repo(context: Context) {
 
     /** Moves money between wallets atomically. Creates no record by design. */
     fun transfer(amount: Long, fromId: Long?, toId: Long?) {
-        if (amount <= 1000) throw ValidationException("Amount must be greater than 1.000")
-        if (fromId == null || toId == null) throw ValidationException("Please select both wallets")
-        if (fromId == toId) throw ValidationException("Wallet asal and tujuan cannot be the same")
+        if (amount <= 1000) throw ValidationException("Nominal harus lebih dari 1.000")
+        if (fromId == null || toId == null) throw ValidationException("Pilih kedua dompet")
+        if (fromId == toId) throw ValidationException("Dompet asal dan tujuan tidak boleh sama")
 
         db.beginTransaction()
         try {
-            val from = walletBalance(fromId) ?: throw ValidationException("Please select both wallets")
-            val to = walletBalance(toId) ?: throw ValidationException("Please select both wallets")
-            if (from < amount) throw ValidationException("Insufficient wallet balance")
+            val from = walletBalance(fromId) ?: throw ValidationException("Pilih kedua dompet")
+            val to = walletBalance(toId) ?: throw ValidationException("Pilih kedua dompet")
+            if (from < amount) throw ValidationException("Saldo dompet tidak cukup")
             val now = System.currentTimeMillis()
             updateBalance(fromId, from - amount, now)
             updateBalance(toId, to + amount, now)
@@ -481,15 +481,15 @@ class Repo(context: Context) {
         val root = try {
             JSONObject(text)
         } catch (e: Exception) {
-            throw ValidationException("Invalid backup file")
+            throw ValidationException("File backup tidak valid")
         }
         if (root.optString("app") != BACKUP_APP) {
-            throw ValidationException("Not a Nabungah backup file")
+            throw ValidationException("Bukan file backup Nabungah")
         }
         val version = root.optInt("version", 0)
         // v1 files predate snapshot sources; their snapshots are treated as manual.
         if (version !in 1..BACKUP_VERSION) {
-            throw ValidationException("Unsupported backup version")
+            throw ValidationException("Versi backup tidak didukung")
         }
 
         val walletRows = mutableListOf<ContentValues>()
@@ -577,14 +577,14 @@ class Repo(context: Context) {
                         val source = if (version >= 2) o.optString("source", Snapshot.SOURCE_MANUAL)
                         else Snapshot.SOURCE_MANUAL
                         if (source != Snapshot.SOURCE_AUTO && source != Snapshot.SOURCE_MANUAL) {
-                            throw ValidationException("Invalid backup file")
+                            throw ValidationException("File backup tidak valid")
                         }
                         put("source", source)
                     },
                 )
             }
         } catch (e: Exception) {
-            throw ValidationException("Invalid backup file")
+            throw ValidationException("File backup tidak valid")
         }
 
         db.beginTransaction()
@@ -601,7 +601,7 @@ class Repo(context: Context) {
             snapshotRows.forEach { db.insertOrThrow("month_snapshot", null, it) }
             db.setTransactionSuccessful()
         } catch (e: SQLiteConstraintException) {
-            throw ValidationException("Backup data is invalid")
+            throw ValidationException("Data backup tidak valid")
         } finally {
             db.endTransaction()
         }
@@ -631,9 +631,9 @@ class Repo(context: Context) {
         source: String = Snapshot.SOURCE_MANUAL,
     ) {
         val key = month.trim()
-        if (key.isEmpty()) throw ValidationException("Month is required")
+        if (key.isEmpty()) throw ValidationException("Bulan wajib diisi")
         if (source != Snapshot.SOURCE_AUTO && source != Snapshot.SOURCE_MANUAL) {
-            throw ValidationException("Unknown snapshot source")
+            throw ValidationException("Sumber snapshot tidak dikenal")
         }
         db.insertWithOnConflict(
             "month_snapshot", null,
@@ -753,7 +753,7 @@ class Repo(context: Context) {
     /** Recomputes one month from its transactions, keeping the fee already chosen for it. */
     fun refreshAutoSnapshot(month: String) {
         val key = month.trim()
-        if (key.isEmpty()) throw ValidationException("Month is required")
+        if (key.isEmpty()) throw ValidationException("Bulan wajib diisi")
 
         val (income, expense) = db.rawQuery(
             """

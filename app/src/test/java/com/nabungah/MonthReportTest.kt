@@ -46,6 +46,7 @@ class MonthReportTest {
         assertEquals(6, report.count)
         assertEquals(150_000L, report.feeExpense) // 2.5% of income, rounded
         assertEquals(150_000L, report.averageExpense)
+        assertEquals(849_000L, report.balanceAfterFee) // 999k reconstructed balance - fee
 
         assertEquals(3, report.topExpenses.size)
         assertEquals("Makan", report.topExpenses[0].title)

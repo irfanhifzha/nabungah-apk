@@ -50,7 +50,7 @@ class RepoTest {
             repo.addTransaction("Gadget", 100_000, "expense", id, "")
             fail("Expected insufficient balance")
         } catch (e: ValidationException) {
-            assertEquals("Insufficient wallet balance", e.message)
+            assertEquals("Saldo dompet tidak cukup", e.message)
         }
         // Nothing was written by the failed attempt.
         assertEquals(1, repo.load().transactions.size)
@@ -99,17 +99,17 @@ class RepoTest {
         repo.addWallet("Cash", 10_000)
         val id = walletId("Cash")
         assertEquals(
-            "Title is required",
+            "Judul wajib diisi",
             runCatching { repo.addTransaction("   ", 1_000, "expense", id, "") }
                 .exceptionOrNull()?.message,
         )
         assertEquals(
-            "Amount must be greater than 0",
+            "Nominal harus lebih dari 0",
             runCatching { repo.addTransaction("X", 0, "expense", id, "") }
                 .exceptionOrNull()?.message,
         )
         assertEquals(
-            "Please select wallet",
+            "Pilih dompet",
             runCatching { repo.addTransaction("X", 1_000, "expense", null, "") }
                 .exceptionOrNull()?.message,
         )
@@ -132,15 +132,15 @@ class RepoTest {
         assertTrue(loaded.transactions.isEmpty())
 
         assertEquals(
-            "Amount must be greater than 1.000",
+            "Nominal harus lebih dari 1.000",
             runCatching { repo.transfer(1_000, cash, bank) }.exceptionOrNull()?.message,
         )
         assertEquals(
-            "Wallet asal and tujuan cannot be the same",
+            "Dompet asal dan tujuan tidak boleh sama",
             runCatching { repo.transfer(50_000, cash, cash) }.exceptionOrNull()?.message,
         )
         assertEquals(
-            "Insufficient wallet balance",
+            "Saldo dompet tidak cukup",
             runCatching { repo.transfer(500_000, cash, bank) }.exceptionOrNull()?.message,
         )
         // Failed transfers left balances untouched.

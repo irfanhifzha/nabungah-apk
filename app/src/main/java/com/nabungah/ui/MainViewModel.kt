@@ -41,7 +41,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 loaded = true
             } catch (e: Exception) {
-                loadError = e.message ?: "Could not open the local database"
+                loadError = e.message ?: "Database lokal tidak bisa dibuka"
                 loaded = true
             }
         }
@@ -64,7 +64,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }.let { fresh -> data = fresh }
                 onDone()
             } catch (e: Exception) {
-                onError(e.message ?: "Something went wrong")
+                onError(e.message ?: "Terjadi kesalahan")
             }
         }
     }
@@ -158,11 +158,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val json = repo.exportJson()
                     resolver.openOutputStream(uri)?.use { out ->
                         out.write(json.toByteArray(Charsets.UTF_8))
-                    } ?: throw IllegalStateException("Could not write the backup file")
+                    } ?: throw IllegalStateException("File backup tidak bisa ditulis")
                 }
                 onDone()
             } catch (e: Exception) {
-                onError(e.message ?: "Export failed")
+                onError(e.message ?: "Ekspor gagal")
             }
         }
     }
@@ -173,7 +173,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val resolver = getApplication<Application>().contentResolver
                 val text = withContext(Dispatchers.IO) {
                     resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                        ?: throw IllegalStateException("Could not read the backup file")
+                        ?: throw IllegalStateException("File backup tidak bisa dibaca")
                 }
                 data = withContext(Dispatchers.IO) {
                     repo.importJson(text)
@@ -181,7 +181,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 onDone()
             } catch (e: Exception) {
-                onError(e.message ?: "Restore failed")
+                onError(e.message ?: "Pemulihan gagal")
             }
         }
     }

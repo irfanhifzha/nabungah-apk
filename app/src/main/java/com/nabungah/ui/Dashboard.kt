@@ -61,10 +61,10 @@ sealed interface Sheet {
 }
 
 private enum class Tab(val key: String, val label: String, val icon: ImageVector) {
-    Home("home", "Home", Icons.Default.Home),
-    Transactions("transactions", "Activity", Icons.AutoMirrored.Filled.List),
-    Review("review", "Review", Icons.Default.Star),
-    Settings("settings", "Settings", Icons.Default.Settings),
+    Home("home", "Beranda", Icons.Default.Home),
+    Transactions("transactions", "Aktivitas", Icons.AutoMirrored.Filled.List),
+    Review("review", "Laporan", Icons.Default.Star),
+    Settings("settings", "Pengaturan", Icons.Default.Settings),
 }
 
 /**
@@ -91,7 +91,7 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
         Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Could not open your data",
+                    text = "Data tidak bisa dibuka",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -101,7 +101,7 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
                     color = Muted,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
-                Button(onClick = { vm.reload() }) { Text("Try again") }
+                Button(onClick = { vm.reload() }) { Text("Coba lagi") }
             }
         }
         return
@@ -122,7 +122,7 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Add") },
+                    text = { Text("Tambah") },
                 )
             }
         },

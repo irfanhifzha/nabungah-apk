@@ -1,8 +1,13 @@
 package com.nabungah.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -31,9 +36,60 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+/** The app's standard card surface: white, hairline border, rounded corners. */
+fun Modifier.appCard(radius: Dp = 16.dp, color: Color = Color.White): Modifier =
+    clip(RoundedCornerShape(radius))
+        .background(color)
+        .border(1.dp, CardBorder, RoundedCornerShape(radius))
+
+/** Clickable card modifier with a subtle press-down scale, so taps feel physical. */
+@Composable
+fun Modifier.pressableCard(pressedScale: Float = 0.97f, onClick: () -> Unit): Modifier {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = tween(durationMillis = if (pressed) 80 else 160),
+        label = "pressScale",
+    )
+    return this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clickable(
+            interactionSource = interaction,
+            indication = LocalIndication.current,
+            onClick = onClick,
+        )
+}
+
+/** Section title with optional trailing actions, used above standalone cards. */
+@Composable
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        actions()
+    }
+}
 
 @Composable
 fun SectionCard(
@@ -45,9 +101,7 @@ fun SectionCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
+            .appCard()
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -140,6 +194,7 @@ fun <T> PickerField(
             value = selectedLabel,
             onValueChange = {},
             readOnly = true,
+            singleLine = true,
             enabled = enabled,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -216,10 +271,11 @@ fun StatTile(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .background(color.copy(alpha = 0.07f))
+            .border(1.dp, color.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = Muted)
         Text(
@@ -244,9 +300,7 @@ fun EmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
+            .appCard()
             .padding(horizontal = 20.dp, vertical = 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -295,7 +349,7 @@ fun ConfirmDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Muted)
+                Text("Batal", color = Muted)
             }
         },
     )

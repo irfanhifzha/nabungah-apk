@@ -3,8 +3,6 @@ package com.nabungah.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,14 +21,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -54,7 +52,7 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = ListBottomPadding,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { GreetingHeader() }
         item { BalanceHero(data) }
@@ -62,43 +60,30 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { onSheet(Sheet.NewTransaction()) },
-                    modifier = Modifier.weight(1f).height(46.dp),
+                    modifier = Modifier.weight(1f).height(48.dp),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Add")
+                    Text("Tambah")
                 }
                 OutlinedButton(
                     onClick = { onSheet(Sheet.Transfer) },
-                    modifier = Modifier.weight(1f).height(46.dp),
+                    modifier = Modifier.weight(1f).height(48.dp),
                 ) { Text("Transfer") }
                 OutlinedButton(
                     onClick = { onSheet(Sheet.AddGoal) },
-                    modifier = Modifier.weight(1f).height(46.dp),
-                ) { Text("Goal") }
+                    modifier = Modifier.weight(1f).height(48.dp),
+                ) { Text("Target") }
             }
         }
 
         if (data.quickActions.isNotEmpty()) {
             item {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Quick actions",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { onSheet(Sheet.AddQuickAction) }) {
-                            Text("+ New")
-                        }
-                    }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(data.quickActions, key = { it.id }) { action ->
-                            QuickActionTile(action) { onSheet(Sheet.NewTransaction(action)) }
-                        }
-                    }
-                }
+                QuickActionsSection(
+                    actions = data.quickActions,
+                    onUse = { onSheet(Sheet.NewTransaction(it)) },
+                    onAdd = { onSheet(Sheet.AddQuickAction) },
+                )
             }
         }
 
@@ -119,31 +104,27 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
         }
 
         item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                Text(
-                    text = "Recent activity",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                if (data.transactions.isNotEmpty()) {
-                    TextButton(onClick = onSeeAll) { Text("See all") }
-                }
-            }
+            SectionHeader(
+                title = "Aktivitas terakhir",
+                modifier = Modifier.padding(top = 4.dp),
+                actions = {
+                    if (data.transactions.isNotEmpty()) CardAction("Lihat semua", onSeeAll)
+                },
+            )
         }
 
         if (recent.isEmpty()) {
             item {
                 EmptyState(
-                    title = "No transactions yet",
-                    body = "Log your first income or expense to see it here.",
-                    actionLabel = "Add transaction",
+                    title = "Belum ada transaksi",
+                    body = "Catat pemasukan atau pengeluaran pertamamu untuk melihatnya di sini.",
+                    actionLabel = "Tambah transaksi",
                     onAction = { onSheet(Sheet.NewTransaction()) },
                 )
             }
         } else {
             items(recent, key = { it.id }) { trx ->
-                TransactionRow(trx, data.walletNames[trx.walletId] ?: "Unknown Wallet")
+                TransactionRow(trx, data.walletNames[trx.walletId] ?: "Dompet tidak dikenal")
             }
         }
     }
@@ -153,40 +134,17 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
 
 @Composable
 private fun GreetingHeader() {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Nabungah",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "Your money, where it sits.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Muted,
-            )
-        }
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(SoftTeal)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(IncomeGreen),
-            )
-            Text(
-                text = "Offline",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Nabungah",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "Uangmu, di mana pun berada.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+        )
     }
 }
 
@@ -194,6 +152,12 @@ private fun GreetingHeader() {
 
 @Composable
 private fun BalanceHero(data: AppData) {
+    // Live preview: reuse the current month's saved fee if there is one, else the 2.5% default.
+    val feePercent = data.snapshots.firstOrNull { it.month == data.currentMonth }?.feePercent ?: 2.5
+    val fee = Fmt.feeExpense(data.monthIncome, feePercent)
+    val afterFee = data.totalBalance - fee
+    val afterFeeText = if (afterFee < 0) "- " + Fmt.rp(-afterFee) else Fmt.rp(afterFee)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -203,7 +167,7 @@ private fun BalanceHero(data: AppData) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Total balance",
+                text = "Total saldo",
                 style = MaterialTheme.typography.labelLarge,
                 color = OnHeroMuted,
                 modifier = Modifier.weight(1f),
@@ -225,7 +189,7 @@ private fun BalanceHero(data: AppData) {
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             HeroStat(
-                label = "Income",
+                label = "Pemasukan",
                 value = "+ " + Fmt.rp(data.monthIncome),
                 color = HeroIncome,
                 modifier = Modifier.weight(1f),
@@ -238,12 +202,56 @@ private fun BalanceHero(data: AppData) {
             )
             Spacer(Modifier.width(14.dp))
             HeroStat(
-                label = "Expense",
+                label = "Pengeluaran",
                 value = "- " + Fmt.rp(data.monthExpense),
                 color = HeroExpense,
                 modifier = Modifier.weight(1f),
             )
         }
+        Spacer(Modifier.height(14.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color(0x33FFFFFF)),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Jika fee disisihkan",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnHeroMuted,
+                )
+                Text(
+                    text = afterFeeText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "Fee ${Fmt.feePercentLabel(feePercent)}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnHeroMuted,
+                )
+                Text(
+                    text = "- " + Fmt.rp(fee),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = HeroExpense,
+                    maxLines = 1,
+                )
+            }
+        }
+        Text(
+            text = "Perkiraan dari pemasukan bulan ini; fee tidak dipotong dari dompet.",
+            style = MaterialTheme.typography.labelSmall,
+            color = OnHeroMuted,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
 
@@ -265,30 +273,78 @@ private fun HeroStat(label: String, value: String, color: Color, modifier: Modif
 // ------------------------------------------------------------ quick actions
 
 @Composable
+private fun QuickActionsSection(
+    actions: List<QuickAction>,
+    onUse: (QuickAction) -> Unit,
+    onAdd: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader(
+            title = "Aksi cepat",
+            actions = { CardAction("+ Baru", onAdd) },
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(actions, key = { it.id }) { action ->
+                QuickActionTile(action) { onUse(action) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun QuickActionTile(action: QuickAction, onClick: () -> Unit) {
+    val isIncome = action.type == "income"
+    val accent = if (isIncome) IncomeGreen else ExpenseRed
+    val tint = if (isIncome) IncomeTint else ExpenseTint
+
     Column(
         modifier = Modifier
-            .width(148.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .width(178.dp)
+            .height(116.dp)
+            .appCard(radius = 18.dp, color = tint)
+            .pressableCard(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = action.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = (if (action.type == "income") "+ " else "- ") + Fmt.rp(action.amount),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            color = if (action.type == "income") IncomeGreen else ExpenseRed,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isIncome) Icons.Default.KeyboardArrowUp
+                    else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "Gunakan ${action.title}",
+                tint = accent.copy(alpha = 0.75f),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = action.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = (if (isIncome) "+ " else "- ") + Fmt.rp(action.amount),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = accent,
+            )
+        }
     }
 }
 
@@ -296,54 +352,92 @@ private fun QuickActionTile(action: QuickAction, onClick: () -> Unit) {
 
 @Composable
 private fun WalletsSection(data: AppData, onAdd: () -> Unit, onTransfer: () -> Unit) {
-    SectionCard(
-        title = "Wallets",
-        actions = {
-            CardAction("+ Add", onAdd)
-            if (data.wallets.size > 1) CardAction("Transfer", onTransfer)
-        },
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader(
+            title = "Dompet",
+            actions = {
+                CardAction("+ Tambah", onAdd)
+                if (data.wallets.size > 1) CardAction("Transfer", onTransfer)
+            },
+        )
         if (data.wallets.isEmpty()) {
             EmptyState(
-                title = "No wallet yet",
-                body = "A wallet is where a balance sits: cash, bank, e-wallet.",
-                actionLabel = "Add wallet",
+                title = "Belum ada dompet",
+                body = "Dompet adalah tempat saldo berada: tunai, bank, atau e-wallet.",
+                actionLabel = "Tambah dompet",
                 onAction = onAdd,
             )
         } else {
-            data.wallets.forEachIndexed { index, wallet ->
-                if (index > 0) {
-                    HorizontalDivider(color = CardBorder, modifier = Modifier.padding(vertical = 6.dp))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(SoftTeal),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = wallet.name.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = wallet.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = Fmt.rp(wallet.balance),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                data.wallets.forEach { wallet ->
+                    WalletCard(wallet.name, wallet.balance, data.totalBalance)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WalletCard(name: String, balance: Long, total: Long) {
+    val rawShare = if (total <= 0) 0f else (balance.toFloat() / total).coerceIn(0f, 1f)
+    val shareProgress by animateFloatAsState(
+        targetValue = rawShare,
+        animationSpec = tween(durationMillis = 500),
+        label = "walletShare",
+    )
+    val share = (rawShare * 100).roundToInt()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .appCard()
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(SoftTeal),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = name.take(1).uppercase(),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { shareProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(3.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = CardBorder,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "$share% dari total saldo",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
+        Text(
+            text = Fmt.rp(balance),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -351,26 +445,25 @@ private fun WalletsSection(data: AppData, onAdd: () -> Unit, onTransfer: () -> U
 
 @Composable
 private fun GoalsSection(goals: List<Goal>, onAdd: () -> Unit, onEdit: (Goal) -> Unit) {
-    SectionCard(
-        title = "Savings goals",
-        actions = { CardAction("+ Add", onAdd) },
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader(
+            title = "Target tabungan",
+            actions = { CardAction("+ Tambah", onAdd) },
+        )
         if (goals.isEmpty()) {
             EmptyState(
-                title = "Nothing saved yet",
-                body = "Goals track progress on their own; they are not linked to wallets.",
-                actionLabel = "Create goal",
+                title = "Belum ada target",
+                body = "Target dihitung sendiri dan tidak terhubung ke dompet.",
+                actionLabel = "Buat target",
                 onAction = onAdd,
             )
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                goals.forEach { goal -> GoalProgress(goal, onEdit) }
-            }
-            Spacer(Modifier.height(10.dp))
+            goals.forEach { goal -> GoalProgress(goal, onEdit) }
             Text(
-                text = "Goals are not connected to wallets. Move the money manually.",
+                text = "Target tidak terhubung ke dompet. Pindahkan uangnya secara manual.",
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
     }
@@ -395,11 +488,10 @@ private fun GoalProgress(goal: Goal, onEdit: (Goal) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onEdit(goal) }
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .appCard()
+            .pressableCard { onEdit(goal) }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -409,7 +501,11 @@ private fun GoalProgress(goal: Goal, onEdit: (Goal) -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = goal.status.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                text = when (goal.status) {
+                    "completed" -> "Selesai"
+                    "cancelled" -> "Dibatalkan"
+                    else -> "Berjalan"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor,
                 fontWeight = FontWeight.SemiBold,
@@ -432,7 +528,7 @@ private fun GoalProgress(goal: Goal, onEdit: (Goal) -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "of ${Fmt.rp(goal.targetAmount)}",
+                text = "dari ${Fmt.rp(goal.targetAmount)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = Muted,
             )

@@ -134,12 +134,12 @@ Each row shows: title, formatted timestamp, wallet name, note (only if present),
 Per-row button copies this exact WhatsApp-style block (blank line handling as shown):
 
 ```
-*🧾 Transaksi Title: {title}*
-💰 Amount: Rp {amount}
-📌 Type: {income|expense}
-🏦 Wallet: {wallet name}
-🗓️ Date: {weekday short}, {dd}/{MM}/{yyyy}, {HH}:{mm}
-📝 Note: {note or "-"}
+*🧾 Transaksi: {title}*
+💰 Nominal: Rp {amount}
+📌 Tipe: {Pemasukan|Pengeluaran}
+🏦 Dompet: {wallet name}
+🗓️ Tanggal: {weekday short}, {dd}/{MM}/{yyyy}, {HH}:{mm}
+📝 Catatan: {note or "-"}
 ```
 
 - The button shows a checkmark for ~1.5 s after copying.
@@ -292,13 +292,13 @@ edited by hand.
 - **Copy to clipboard** per row, exact block:
 
 ```
-*📅 Data Statistik Bulan: {month}*
-🔁 Source: {Manual|Automatic}
-💰 Total Income: Rp {totalIncome}
-💸 Total Expense: Rp {totalExpense}
-💼 Total Balance: Rp {totalBalance}
-💳 Fee ({feePercent}%): Rp {feeExpense}
-🕒 Updated: {updatedAt}
+*📅 Statistik Bulan: {month}*
+🔁 Sumber: {Manual|Otomatis}
+💰 Total Pemasukan: Rp {totalIncome}
+💸 Total Pengeluaran: Rp {totalExpense}
+💼 Total Saldo: Rp {totalBalance}
+💳 Biaya ({feePercent}%): Rp {feeExpense}
+🕒 Diperbarui: {updatedAt}
 ```
 (Checkmark feedback ~1.5 s, as with transactions.)
 

@@ -72,12 +72,12 @@ fun TransactionsTab(data: AppData) {
         item {
             Column {
                 Text(
-                    text = "Activity",
+                    text = "Aktivitas",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Every transaction, newest first.",
+                    text = "Semua transaksi, terbaru dulu.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -88,12 +88,12 @@ fun TransactionsTab(data: AppData) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Search title, note or wallet") },
+                placeholder = { Text("Cari judul, catatan, atau dompet") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            Icon(Icons.Default.Clear, contentDescription = "Hapus pencarian")
                         }
                     }
                 },
@@ -105,21 +105,21 @@ fun TransactionsTab(data: AppData) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PickerField(
-                    label = "Month",
-                    selectedLabel = if (month.isEmpty()) "All months" else Fmt.monthLabel(month),
-                    options = (listOf("" to "All months") +
+                    label = "Bulan",
+                    selectedLabel = if (month.isEmpty()) "Semua bulan" else Fmt.monthLabel(month),
+                    options = (listOf("" to "Semua bulan") +
                         months.map { it to Fmt.monthLabel(it) }).distinctBy { it.first },
                     onSelect = { month = it },
                     modifier = Modifier.weight(1f),
                 )
                 PickerField(
-                    label = "Type",
+                    label = "Tipe",
                     selectedLabel = when (type) {
-                        "income" -> "Income"
-                        "expense" -> "Expense"
-                        else -> "All types"
+                        "income" -> "Pemasukan"
+                        "expense" -> "Pengeluaran"
+                        else -> "Semua tipe"
                     },
-                    options = listOf("" to "All types", "income" to "Income", "expense" to "Expense"),
+                    options = listOf("" to "Semua tipe", "income" to "Pemasukan", "expense" to "Pengeluaran"),
                     onSelect = { type = it },
                     modifier = Modifier.weight(1f),
                 )
@@ -129,7 +129,7 @@ fun TransactionsTab(data: AppData) {
         item {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(
-                    text = "${matches.size} record${if (matches.size == 1) "" else "s"}",
+                    text = "${matches.size} transaksi",
                     style = MaterialTheme.typography.labelMedium,
                     color = Muted,
                     modifier = Modifier.weight(1f),
@@ -154,14 +154,14 @@ fun TransactionsTab(data: AppData) {
             item {
                 if (data.transactions.isEmpty()) {
                     EmptyState(
-                        title = "No transactions yet",
-                        body = "Tap Add to record your first one.",
+                        title = "Belum ada transaksi",
+                        body = "Ketuk Tambah untuk mencatat yang pertama.",
                     )
                 } else {
                     EmptyState(
-                        title = "No matches",
-                        body = "Try another month, type, or search word.",
-                        actionLabel = "Clear filters",
+                        title = "Tidak ada hasil",
+                        body = "Coba bulan, tipe, atau kata pencarian lain.",
+                        actionLabel = "Hapus filter",
                         onAction = {
                             query = ""
                             month = ""
@@ -183,7 +183,7 @@ fun TransactionsTab(data: AppData) {
                     )
                 }
                 items(dayTrx, key = { it.id }) { trx ->
-                    TransactionRow(trx, data.walletNames[trx.walletId] ?: "Unknown Wallet")
+                    TransactionRow(trx, data.walletNames[trx.walletId] ?: "Dompet tidak dikenal")
                 }
             }
 
@@ -193,7 +193,7 @@ fun TransactionsTab(data: AppData) {
                         onClick = { limit += 20 },
                         modifier = Modifier.fillMaxWidth().height(46.dp),
                     ) {
-                        Text("Show ${minOf(20, matches.size - shown.size)} more")
+                        Text("Tampilkan ${minOf(20, matches.size - shown.size)} lagi")
                     }
                 }
             }

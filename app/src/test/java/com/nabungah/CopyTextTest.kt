@@ -47,12 +47,12 @@ class CopyTextTest {
             month = "2026-11",
         )
         val expected = """
-            *🧾 Transaksi Title: Kopi*
-            💰 Amount: Rp 20.000
-            📌 Type: expense
-            🏦 Wallet: Cash
-            🗓️ Date: Sab, 21/11/2026, 14:05
-            📝 Note: pagi
+            *🧾 Transaksi: Kopi*
+            💰 Nominal: Rp 20.000
+            📌 Tipe: Pengeluaran
+            🏦 Dompet: Cash
+            🗓️ Tanggal: Sab, 21/11/2026, 14:05
+            📝 Catatan: pagi
         """.trimIndent()
         assertEquals(expected, trxCopyText(trx, "Cash"))
     }
@@ -69,14 +69,14 @@ class CopyTextTest {
             occurredAt = millis(2026, Calendar.NOVEMBER, 2, 8, 30),
             month = "2026-11",
         )
-        val block = trxCopyText(trx, "Unknown Wallet")
+        val block = trxCopyText(trx, "Dompet tidak dikenal")
         assertEquals(
-            "*🧾 Transaksi Title: Gaji*\n" +
-                "💰 Amount: Rp 1.500.000\n" +
-                "📌 Type: income\n" +
-                "🏦 Wallet: Unknown Wallet\n" +
-                "🗓️ Date: Sen, 02/11/2026, 08:30\n" +
-                "📝 Note: -",
+            "*🧾 Transaksi: Gaji*\n" +
+                "💰 Nominal: Rp 1.500.000\n" +
+                "📌 Tipe: Pemasukan\n" +
+                "🏦 Dompet: Dompet tidak dikenal\n" +
+                "🗓️ Tanggal: Sen, 02/11/2026, 08:30\n" +
+                "📝 Catatan: -",
             block,
         )
     }
@@ -93,13 +93,13 @@ class CopyTextTest {
             updatedAt = millis(2026, Calendar.NOVEMBER, 21, 11, 42),
         )
         val expected = """
-            *📅 Data Statistik Bulan: 2026-11*
-            🔁 Source: Manual
-            💰 Total Income: Rp 1.500.000
-            💸 Total Expense: Rp 20.000
-            💼 Total Balance: Rp 130.000
-            💳 Fee (2,5%): Rp 37.500
-            🕒 Updated: Sab, 21/11/2026, 11:42
+            *📅 Statistik Bulan: 2026-11*
+            🔁 Sumber: Manual
+            💰 Total Pemasukan: Rp 1.500.000
+            💸 Total Pengeluaran: Rp 20.000
+            💼 Total Saldo: Rp 130.000
+            💳 Biaya (2,5%): Rp 37.500
+            🕒 Diperbarui: Sab, 21/11/2026, 11:42
         """.trimIndent()
         assertEquals(expected, snapshotCopyText(snapshot))
     }

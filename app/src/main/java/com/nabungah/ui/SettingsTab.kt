@@ -52,7 +52,7 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             vm.exportBackup(
                 uri = uri,
                 onError = { backupMessage = it; backupFailed = true },
-                onDone = { backupMessage = "Backup exported."; backupFailed = false },
+                onDone = { backupMessage = "Backup berhasil diekspor."; backupFailed = false },
             )
         }
     }
@@ -63,7 +63,7 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             vm.importBackup(
                 uri = uri,
                 onError = { backupMessage = it; backupFailed = true },
-                onDone = { backupMessage = "Backup restored."; backupFailed = false },
+                onDone = { backupMessage = "Backup berhasil dipulihkan."; backupFailed = false },
             )
         }
     }
@@ -76,12 +76,12 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         item {
             Column {
                 Text(
-                    text = "Settings",
+                    text = "Pengaturan",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Everything lives on this device.",
+                    text = "Semua data tersimpan di perangkat ini.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -89,9 +89,9 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
-            SectionCard(title = "Backup & restore") {
+            SectionCard(title = "Backup & pulihkan") {
                 Text(
-                    text = "Export one JSON file with all data. Importing replaces everything currently in the app.",
+                    text = "Ekspor semua data ke satu file JSON. Impor akan mengganti seluruh data di aplikasi.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -100,11 +100,11 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     OutlinedButton(
                         onClick = { exportLauncher.launch(Fmt.backupFileName(System.currentTimeMillis())) },
                         modifier = Modifier.weight(1f),
-                    ) { Text("Export") }
+                    ) { Text("Ekspor") }
                     OutlinedButton(
                         onClick = { confirmRestore = true },
                         modifier = Modifier.weight(1f),
-                    ) { Text("Import") }
+                    ) { Text("Impor") }
                 }
                 if (backupMessage != null) {
                     Spacer(Modifier.height(8.dp))
@@ -119,11 +119,11 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
 
         item {
             SectionCard(
-                title = "Wallets",
-                actions = { CardAction("+ Add", { onSheet(Sheet.AddWallet) }) },
+                title = "Dompet",
+                actions = { CardAction("+ Tambah", { onSheet(Sheet.AddWallet) }) },
             ) {
                 if (data.wallets.isEmpty()) {
-                    EmptyText("No wallets yet")
+                    EmptyText("Belum ada dompet")
                 } else {
                     data.wallets.forEach { wallet -> WalletRow(wallet) }
                     Spacer(Modifier.height(10.dp))
@@ -131,24 +131,24 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                         onClick = { onSheet(Sheet.Transfer) },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = data.wallets.size > 1,
-                    ) { Text("Transfer between wallets") }
+                    ) { Text("Transfer antar dompet") }
                 }
             }
         }
 
         item {
             SectionCard(
-                title = "Quick actions",
-                actions = { CardAction("+ New", { onSheet(Sheet.AddQuickAction) }) },
+                title = "Aksi cepat",
+                actions = { CardAction("+ Baru", { onSheet(Sheet.AddQuickAction) }) },
             ) {
                 if (data.quickActions.isEmpty()) {
-                    EmptyText("No quick actions yet")
+                    EmptyText("Belum ada aksi cepat")
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         data.quickActions.forEach { action -> QuickActionRow(action) }
                     }
                     TextButton(onClick = { onSheet(Sheet.DeleteQuickActions) }) {
-                        Text("Delete quick actions", color = MaterialTheme.colorScheme.error)
+                        Text("Hapus aksi cepat", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -156,11 +156,11 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
 
         item {
             SectionCard(
-                title = "Savings goals",
-                actions = { CardAction("+ Add", { onSheet(Sheet.AddGoal) }) },
+                title = "Target tabungan",
+                actions = { CardAction("+ Tambah", { onSheet(Sheet.AddGoal) }) },
             ) {
                 if (data.goals.isEmpty()) {
-                    EmptyText("No goals yet")
+                    EmptyText("Belum ada target")
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         data.goals.forEach { goal -> GoalRow(goal) { onSheet(Sheet.EditGoal(goal)) } }
@@ -172,23 +172,23 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         item {
             SectionCard(title = "Data & reset") {
                 Text(
-                    text = "These remove records permanently. Export a backup first if you are unsure.",
+                    text = "Tindakan ini menghapus data secara permanen. Ekspor backup dulu jika ragu.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
                 Spacer(Modifier.height(10.dp))
-                DangerAction("Delete transactions", data.transactions.size) {
+                DangerAction("Hapus transaksi", data.transactions.size) {
                     onSheet(Sheet.DeleteTransactions)
                 }
-                DangerAction("Delete wallets", data.wallets.size) { onSheet(Sheet.DeleteWallets) }
-                DangerAction("Delete monthly snapshots", data.snapshots.size) {
+                DangerAction("Hapus dompet", data.wallets.size) { onSheet(Sheet.DeleteWallets) }
+                DangerAction("Hapus snapshot bulanan", data.snapshots.size) {
                     onSheet(Sheet.DeleteSnapshots)
                 }
             }
         }
 
         item {
-            SectionCard(title = "About") {
+            SectionCard(title = "Tentang") {
                 Text(
                     text = "Nabungah ${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodyLarge,
@@ -196,8 +196,8 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Single user, fully offline. No accounts, no network access, no analytics. " +
-                        "Records sit in a local SQLite database and only leave the device through a backup you export.",
+                    text = "Satu pengguna, sepenuhnya offline. Tanpa akun, akses jaringan, atau analitik. " +
+                        "Data tersimpan di SQLite lokal dan hanya keluar lewat backup yang kamu ekspor.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -207,9 +207,9 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
 
     if (confirmRestore) {
         ConfirmDialog(
-            title = "Restore backup?",
-            message = "This replaces all wallets, transactions, quick actions, goals and snapshots with the backup file. It cannot be undone.",
-            confirmLabel = "Choose File",
+            title = "Pulihkan backup?",
+            message = "Semua dompet, transaksi, aksi cepat, target, dan snapshot akan diganti isi file backup. Tidak bisa dibatalkan.",
+            confirmLabel = "Pilih file",
             destructive = false,
             onConfirm = {
                 importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
