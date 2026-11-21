@@ -12,6 +12,16 @@ val CanvasBg = Color(0xFFF6F7F8)
 val StatusOrange = Color(0xFFD97706)
 val CardBorder = Color(0xFFE6E8EB)
 
+// Dashboard accents
+val HeroTop = Color(0xFF0F766E)
+val HeroBottom = Color(0xFF0B4F4A)
+val OnHeroMuted = Color(0xFFB8DEDA)
+val HeroIncome = Color(0xFFBBF7D0)
+val HeroExpense = Color(0xFFFECACA)
+val IncomeTint = Color(0xFFECF8F0)
+val ExpenseTint = Color(0xFFFDEFEF)
+val SoftTeal = Color(0xFFE6F4F1)
+
 private val Colors = lightColorScheme(
     primary = Color(0xFF0F766E),
     onPrimary = Color.White,

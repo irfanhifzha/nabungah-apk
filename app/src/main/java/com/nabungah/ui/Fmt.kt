@@ -76,6 +76,20 @@ object Fmt {
     fun monthKey(millis: Long): String =
         SimpleDateFormat("yyyy-MM", Locale.US).format(Date(millis))
 
+    /** "21 Nov 2026" for transaction date groups. */
+    fun dayLabel(millis: Long): String =
+        SimpleDateFormat("d MMM yyyy", ID).format(Date(millis))
+
+    /** Stable grouping key for a day: "2026-11-21". */
+    fun dayKey(millis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis))
+
+    /** "2026-11" -> "November 2026"; falls back to the raw key. */
+    fun monthLabel(key: String): String = runCatching {
+        val parsed = SimpleDateFormat("yyyy-MM", Locale.US).parse(key) ?: return@runCatching key
+        SimpleDateFormat("MMMM yyyy", ID).format(parsed)
+    }.getOrDefault(key)
+
     /** "nabungah-backup-20261121-1142.json" for the file picker. */
     fun backupFileName(millis: Long): String =
         "nabungah-backup-" +

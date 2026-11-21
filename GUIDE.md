@@ -12,19 +12,25 @@ Nabungah ("nabung" = saving) is a personal money tracker. You record **where you
 
 - **One user, one device, no account.** There is no sign-up, login, password, session, profile screen, or cloud sync. The app opens straight into the dashboard with the local data.
 - **There is no user identity anywhere in the data model** — no `user_id`, no `uid`, no per-user partitioning. All rows belong to the installation.
-- The whole product is **one dashboard screen** plus small modal dialogs (bottom sheets on Android) for every create/edit/delete action.
+- The product is a **four-tab shell** — Home (dashboard), Activity (all transactions), Review (monthly figures) and Settings (backup, setup, data tools) — plus small modal dialogs (bottom sheets on Android) for every create/edit/delete action.
 - All money values are **Indonesian Rupiah integers** (no cents, no other currency).
 
-### Dashboard section order (top → bottom)
+### Information order
 
-1. **Wallets**
-2. **Nabung** (savings goals)
-3. **Quick Actions**
-4. **Recent Transactions**
-5. **Monthly Overview** (current month, live)
-6. **Monthly History** (saved snapshots)
+The same content, split across tabs (the order inside each tab still matters):
 
-This order is the product's structure; keep it.
+**Home** — total balance hero with this month's income/expense, quick entry, Quick Actions,
+Wallets, Nabung (savings goals), then the five most recent transactions with a link to Activity.
+
+**Activity** — searchable, filterable transaction log grouped by day, newest first.
+
+**Review** — one month at a time: income/expense/net, the informational fee calculator, saving
+(upserting) that month's snapshot, then Monthly History (saved snapshots).
+
+**Settings** — backup/restore, wallet and quick-action setup, goal list, destructive data tools,
+and the offline/about note.
+
+This split is the product's structure; keep it.
 
 ---
 
@@ -215,22 +221,25 @@ Consequences to preserve:
 
 ---
 
-## 8. Monthly Overview (current month, live)
+## 8. Monthly Review (one month at a time)
 
-Always reflects **the device's current month**, independent of the transaction page's month filter.
+Defaults to **the device's current month** and can step to any month that has a transaction or a
+saved snapshot. It is independent of the Activity tab's filters.
 
 Shows:
-- `{YYYY-MM}` of the current month.
+- The selected month (`{YYYY-MM}`) and its transaction count.
 - **Total Balance** = sum of all wallet balances (all-time, not month-scoped).
 - **Total Income** = sum of income transactions whose month = current month.
 - **Total Expense** = sum of expense transactions whose month = current month.
+- **Net** = Total Income − Total Expense for the selected month.
 - **Fee %** — editable, default **2.5**, persisted only through the snapshot flow.
 - **Fee Expense** = `round(Total Income × Fee % / 100)`; purely informational, not deducted anywhere.
-- **Sync Data** button → opens the snapshot dialog (§9).
+- **Save review** (upsert) writes the snapshot for the selected month (§9); an existing snapshot asks before it is overwritten.
+- **Enter numbers manually** opens the Sync Month dialog (§9) for balance/income/expense overrides.
 
 Rebuild notes:
 - Recompute from the database on any data change; these are derived values, never stored.
-- The fee percentage is a **draft** on the dashboard until saved into a snapshot. Do not persist it as a global setting unless you explicitly decide to (the original resets to 2.5 on reload).
+- The fee percentage is a **draft** in the Review tab until saved into a snapshot. Do not persist it as a global setting unless you explicitly decide to (the original resets to 2.5 on reload).
 - Accept decimal fee input (e.g. `2,5`). The original stripped the decimal character, making 2.5 untypeable — fix it.
 
 ---
@@ -336,11 +345,11 @@ Notes:
 
 ## 11. Screens & interactions for an Android build
 
-- **Single activity**, dashboard scroll column. Bottom sheets (or full-width dialogs) replace the web modals: Add Wallet, New Transaction, New Quick Action, Create Goal, Edit Goal, Tukar Uang, Sync Month, Delete Wallets, Delete Transactions, Delete Quick Actions, Delete Monthly Data.
+- **Single activity** with a bottom bar of four tabs: **Home** (dashboard), **Activity** (transaction log), **Review** (monthly figures and snapshots), **Settings** (backup and data tools). Each tab is its own lazy scroll column. Bottom sheets (or full-width dialogs) replace the web modals: Add Wallet, New Transaction, New Quick Action, Create Goal, Edit Goal, Tukar Uang, Sync Month, Delete Wallets, Delete Transactions, Delete Quick Actions, Delete Monthly Data.
 - Every destructive action confirms via dialog; "Delete All" is a separate, clearly-labelled red action.
 - Keep the copy-to-clipboard affordances (§4, §9) using the Android clipboard.
 - Empty states for all five lists, exactly as specified.
-- No navigation drawer, no tabs, no settings screen, no onboarding — the original has none, and adding them conflicts with "minimal".
+- No navigation drawer, no onboarding, and no navigation library: the tab selection is plain screen state. Destructive actions stay under Settings so the dashboard and Activity list remain read-mostly.
 - Since it is offline-only, there must be **no splash/login gate**: first launch shows the empty dashboard.
 
 ---

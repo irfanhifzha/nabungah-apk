@@ -13,10 +13,10 @@ the implementation that satisfies it.
 |---|---|
 | Language / UI | Kotlin 2.2.10, Jetpack Compose (Material 3) |
 | Persistence | Plain `SQLiteOpenHelper` + hand-written SQL (no Room, no DAO codegen) |
-| Screens | One activity, one scrolling dashboard, modal bottom sheets |
-| Architecture | Activity → Compose screen → `MainViewModel` → `Repo` → SQLite |
+| Screens | One activity; four tabs (Home, Activity, Review, Settings) + modal bottom sheets |
+| Architecture | Activity → Compose shell → `MainViewModel` → `Repo` → SQLite |
 | Dependency injection | None (manual construction) |
-| Navigation | None (no NavHost, no fragments, no routes) |
+| Navigation | Bottom bar only; selected tab is Compose state (no NavHost, fragments or routes) |
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
@@ -40,8 +40,13 @@ app/src/main/java/com/nabungah/
     ├── Theme.kt             Colors, status/semantic colors, NabungTheme
     ├── Fmt.kt               Money/date/fee formatting + parsing (pure, unit-tested)
     ├── MainViewModel.kt     AppData state, IO offloading, write/reload orchestration
-    ├── Dashboard.kt         Screen layout + section composables + Sheet host
-    ├── Components.kt        SectionCard, fields, pickers, confirm dialog, rows
+    ├── Dashboard.kt         App shell: bottom tabs, FAB, shared Sheet host
+    ├── HomeTab.kt           Balance hero, quick entry, wallets, goals, recent list
+    ├── TransactionsTab.kt   Search + month/type filters, day-grouped transaction log
+    ├── ReviewTab.kt         Month nav, totals, fee calculator, snapshot saving
+    ├── SettingsTab.kt       Backup/restore, wallet & goal setup, delete tools, about
+    ├── Rows.kt              Shared TransactionRow, SnapshotRow, AmountRow
+    ├── Components.kt        SectionCard, fields, pickers, empty states, dialog
     └── Sheets.kt            All 11 bottom-sheet forms, delete flows, clipboard text
 
 app/src/main/res/
@@ -102,11 +107,12 @@ Rules that keep this safe:
 |---|---|---|
 | All entities + current-month totals | `MainViewModel.data` | app process |
 | Loading flag | `MainViewModel.loaded` | app process |
-| Transaction filters (month/type/limit) | `Dashboard` (`remember`) | composition |
-| Fee % draft on the dashboard | `Dashboard` (`remember`, default `"2,5"`) | composition |
+| Selected tab | `Dashboard` (`rememberSaveable`, key `home`/`transactions`/`review`/`settings`) | composition + config change |
+| Activity search/filters/limit | `TransactionsTab` (`rememberSaveable`) | composition |
+| Review month + fee draft | `ReviewTab` (`rememberSaveable`, fee default `"2,5"`) | composition |
 | Open sheet / form field values | `Dashboard` + sheet composables | sheet lifetime |
 | Confirmation dialogs | sheet composables (`ConfirmDialog`) | dialog lifetime |
-| Backup status message | `Dashboard` (`remember`) | composition |
+| Backup status message | `SettingsTab` (`remember`) | composition |
 
 The fee draft intentionally resets to 2.5 on reload/recreation; only snapshots persist a fee.
 
@@ -181,7 +187,7 @@ the list shown in the form.
 
 ## 5. Backup & restore
 
-The Backup card at the bottom of the dashboard exports/imports **one JSON file** through the
+The **Backup & restore** card in the Settings tab exports/imports **one JSON file** through the
 Storage Access Framework — no storage permissions and no external dependencies.
 
 - **Export** opens `ActivityResultContracts.CreateDocument("application/json")`, default file name
@@ -200,7 +206,7 @@ Storage Access Framework — no storage permissions and no external dependencies
 - Wallet ids are preserved so transaction links survive a round trip. After restore the view model
   reloads all state.
 - File I/O happens on `Dispatchers.IO` in `MainViewModel.exportBackup` / `importBackup`; the UI
-  only shows a short success/error line in the Backup card.
+  only shows a short success/error line in the Settings card.
 
 When the backup schema changes, bump `Repo.BACKUP_VERSION`, update `exportJson`/`importJson`, and
 add a round-trip case to `RepoTest`.
@@ -238,25 +244,32 @@ only if the spec itself changes.
 
 ## 7. UI structure
 
-`Dashboard` is the only screen:
+`Dashboard` is the app shell: a `Scaffold` with a `NavigationBar` and one shared sheet host. Each
+destination owns its own `LazyColumn`, so only the visible tab composes.
 
 ```
-LazyColumn (16dp padding, 14dp gaps)
-├── App header ("Nabungah")
-├── WalletsCard          — balances + Add / Delete / Tukar Uang
-├── GoalsCard            — goal cards (tap = Edit Goal) + permanent wallet note
-├── QuickActionsCard     — 2-column grid, tap pre-fills New Transaction
-├── TransactionsHeaderCard — filters (month / type / limit) + count line + Add / Delete
-├── TransactionRow items — lazy, one card per row, Copy button
-├── MonthlyOverviewCard  — current month totals, fee input, Sync Data
-├── HistoryHeaderCard    — Delete action
-├── SnapshotRow items    — lazy, Copy button
-└── Empty cards for every list when empty
+Dashboard (Scaffold)
+├── bottomBar   NavigationBar: Home | Activity | Review | Settings
+├── FAB         "Add" → NewTransaction (Home and Activity only)
+└── content (by tab)
+    ├── HomeTab       header + offline pill, hero balance (month in/out), Add/Transfer/Goal,
+    │                 quick-action strip, wallets, savings goals, last 5 transactions
+    ├── TransactionsTab  search field, month/type pickers, record+totals line, day-grouped rows,
+    │                 "Show more" (20 at a time), empty/filtered empty states
+    ├── ReviewTab     month stepper (defaults to current month), income/expense tiles, net,
+    │                 fee calculator, save/update snapshot, saved-months history
+    └── SettingsTab   backup & restore, wallets, quick actions, goals, data & reset, about
 ```
 
+- **Destructive actions live in Settings**, not on the dashboard: delete wallets/transactions/
+  quick actions/snapshots each open their existing sheet from the "Data & reset" card. The
+  dashboard and Activity stay read-mostly.
+- **Tab state** is a `Tab` enum looked up by its string key with `rememberSaveable`; no navigation
+  library. Switching tabs disposes the previous tab's `remember` state (filters, review month).
 - **Sheet host:** `Dashboard` holds `var sheet: Sheet?`; `Sheet` is a sealed interface in
-  `Dashboard.kt` and is rendered through a single `ModalBottomSheet`. Add a new sheet by adding a
-  `Sheet` subtype, a composable in `Sheets.kt`, and a branch in the host `when`.
+  `Dashboard.kt` and is rendered through a single `ModalBottomSheet`. Tabs receive
+  `onSheet: (Sheet) -> Unit`. Add a new sheet by adding a `Sheet` subtype, a composable in
+  `Sheets.kt`, and a branch in the host `when`.
 - **Forms:** each sheet owns its form state (`remember { mutableStateOf(...) }`), calls the VM
   with `onError = { error = it }` and `onDone = { sheet = null }`. Do not close a sheet before the
   VM confirms success.
@@ -266,11 +279,13 @@ LazyColumn (16dp padding, 14dp gaps)
   `windowInsetsPadding(WindowInsets.safeDrawing)`. Sheets add `imePadding()` +
   `navigationBarsPadding()` in `SheetColumn`.
 - **Theme:** light-only `lightColorScheme`. Semantic colors (`IncomeGreen`, `ExpenseRed`,
-  `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`) are declared in `Theme.kt`; reuse them rather
-  than hardcoding new colors.
-- **Components:** `SectionCard`, `CardAction`, `LabeledTextField`, `MoneyField`, `PickerField`,
-  `FormError`, `SelectableRow`, `ConfirmDialog`, `CopyButton`, `EmptyText` cover the recurring
-  patterns. Prefer extending one of these over adding a one-off widget.
+  `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`) plus the hero gradient colors
+  (`HeroTop`/`HeroBottom`, `OnHeroMuted`, `HeroIncome`, `HeroExpense`, `SoftTeal`, tinted
+  backgrounds) are declared in `Theme.kt`; reuse them rather than hardcoding new colors.
+- **Components:** `SectionCard`, `CardAction`, `StatTile`, `EmptyState`, `LabeledTextField`,
+  `MoneyField`, `PickerField`, `FormError`, `SelectableRow`, `ConfirmDialog`, `CopyButton`,
+  `EmptyText` cover the recurring patterns. Prefer extending one of these over adding a one-off
+  widget.
 
 ### Goal progress
 
@@ -298,13 +313,15 @@ at 100.
 4. Add the mutation pass-through in `MainViewModel.write`.
 5. Add `Sheet` subtype + composable in `Sheets.kt` + host branch in `Dashboard`.
    If the table belongs in backups, add it to `Repo.exportJson`/`importJson` too.
-6. Add a section card in the `LazyColumn`; rows should be `items(...)` if the list can grow.
+6. Add a section card to the tab that owns it (`HomeTab`, `ReviewTab` or `SettingsTab`); rows
+   should be `items(...)` if the list can grow. Put delete entry points under Settings.
 7. Add instrumentation coverage in `RepoTest` for the money invariants.
 
-### "Add a month selector to Monthly Overview"
+### "Change the review month"
 
-Allowed by §13.5, but keep the **current month as the default** and keep the snapshot flow tied to
-the selected month. Transactions filters are independent; don't merge the two states.
+`ReviewTab` already steps through every month that has transactions or a snapshot, defaulting to the
+current month. Keep that default; keep the snapshot flow tied to the selected month. Activity's
+filters are independent state — don't merge the two.
 
 ### What not to add
 

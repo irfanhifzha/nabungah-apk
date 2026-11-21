@@ -1,0 +1,144 @@
+package com.nabungah.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.nabungah.data.Snapshot
+import com.nabungah.data.Trx
+
+/** Label on the left, right-aligned amount. Shared by cards and snapshot rows. */
+@Composable
+fun AmountRow(label: String, amount: Long, color: Color, prefix: String = "") {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Muted,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = prefix + Fmt.rp(amount),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+        )
+    }
+}
+
+@Composable
+fun TransactionRow(trx: Trx, walletName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
+            .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 4.dp),
+    ) {
+        Row {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = trx.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "${Fmt.timestamp(trx.occurredAt)} · $walletName",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                if (trx.note.isNotBlank()) {
+                    Text(
+                        text = trx.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(
+                text = (if (trx.type == "income") "+ " else "- ") + Fmt.rp(trx.amount),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (trx.type == "income") IncomeGreen else ExpenseRed,
+                modifier = Modifier.padding(top = 2.dp, start = 6.dp),
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            CopyButton(text = trxCopyText(trx, walletName))
+        }
+    }
+}
+
+@Composable
+fun SnapshotRow(snapshot: Snapshot) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
+            .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = Fmt.monthLabel(snapshot.month),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            CopyButton(text = snapshotCopyText(snapshot))
+        }
+        HorizontalDivider(
+            color = CardBorder,
+            modifier = Modifier.padding(top = 6.dp, end = 8.dp, bottom = 8.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 6.dp)) {
+            AmountRow("Income", snapshot.totalIncome, IncomeGreen, prefix = "+ ")
+            AmountRow("Expense", snapshot.totalExpense, ExpenseRed, prefix = "- ")
+            AmountRow("Balance", snapshot.totalBalance, MaterialTheme.colorScheme.onSurface)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Fee ${Fmt.feePercentLabel(snapshot.feePercent)}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = Fmt.rp(snapshot.feeExpense),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                text = "Updated ${Fmt.timestamp(snapshot.updatedAt)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
+    }
+}
