@@ -46,7 +46,10 @@ INI RENCANA UNTUK VERSI `1.3`.
 - [ ] fix card margin layout "transaksi" cause the Rp.. text part its too close to right edge.
 - [ ] update dompet div, more like square card div.
 - [ ] ...
-- [ ] Push tag `v1.3` saat siap merilis — belum dilakukan, menunggu instruksi.
+- [x] Tag `v1.3` sudah dipush. Workflow rilis hijau (3m12s): unit test, build, upload
+  artifact, dan GitHub Release terbit di https://github.com/irfanhifzha/nabungah-apk/releases/tag/v1.3
+  berisi `nabungah-release.apk` (1,3 MB) yang sudah diverifikasi bertanda tangan
+  `CN=Nabungah` (bukan debug).
 - [x] `keystore.properties` dipakai sebagai fallback signing lokal, jadi `assembleRelease` di
   mesin ini otomatis memakai keystore rilis tanpa env var. Gradle daemon tidak lagi jadi
   jebakan; build CI tetap memakai env dari secrets.
