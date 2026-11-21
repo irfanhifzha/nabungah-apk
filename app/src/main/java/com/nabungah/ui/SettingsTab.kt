@@ -415,7 +415,8 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 "${if (info.exportedAt > 0) Fmt.timestamp(info.exportedAt) else "tanpa tanggal"}.\n\n" +
                 "${info.wallets} dompet · ${info.transactions} transaksi · " +
                 "${info.transfers} transfer · ${info.goals} target · " +
-                "${info.quickActions} aksi cepat · ${info.snapshots} snapshot.\n\n" +
+                "${info.quickActions} aksi cepat · ${info.snapshots} snapshot · " +
+                "biaya ${Fmt.feePercentLabel(info.feePercent)}%.\n\n" +
                 "Seluruh data saat ini akan diganti dan tidak bisa dikembalikan.",
             confirmLabel = "Ganti data",
             onConfirm = {

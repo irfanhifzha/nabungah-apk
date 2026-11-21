@@ -20,7 +20,7 @@ the implementation that satisfies it.
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Version | 1.4 (`versionCode` 4), schema v4 |
+| Version | 1.4.1 (`versionCode` 5), schema v4 |
 | Release APK | ~1.5 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
@@ -215,7 +215,7 @@ Storage Access Framework — no storage permissions and no external dependencies
   `nabungah-backup-yyyyMMdd-HHmm.json` (`Fmt.backupFileName`). `Repo.exportJson()` serializes every
   table with stable ids and a header:
   ```json
-  { "app": "nabungah", "version": 4, "exportedAt": 0,
+  { "app": "nabungah", "version": 5, "exportedAt": 0, "feePercent": 2.5,
     "wallets": [...], "transactions": [...], "quickActions": [...],
     "goals": [...], "snapshots": [{ ..., "source": "auto" }],
     "transfers": [...] }
@@ -223,10 +223,11 @@ Storage Access Framework — no storage permissions and no external dependencies
 - **Import** is destructive and always confirmed first: it **replaces** all local data rather than
   merging. `Repo.importJson()` parses and validates the whole document *before* opening the write
   transaction, so a malformed file cannot wipe the database. Header (`app`), `version` (currently
-  `4`; `1`–`3` are still accepted, with starting balances derived and missing transfers ignored)
-  and every row are validated, including duplicate ids, types, months, wallet references and
-  non-negative snapshot numbers. Before replacing anything, the UI shows a preview of the file's
-  record counts; DB constraints are the final guard and roll the transaction back.
+  `5`; `1`–`4` are still accepted, with starting balances derived, the saved fee defaulting to
+  2.5%, and missing transfers ignored) and every row are validated, including duplicate ids,
+  types, months, wallet references and non-negative snapshot numbers. The global fee percentage
+  is exported and restored with the data. Before replacing anything, the UI shows a preview of the
+  file's record counts and fee; DB constraints are the final guard and roll the transaction back.
 - Wallet ids are preserved so transaction links survive a round trip. After restore the view model
   reloads all state.
 - File I/O happens on `Dispatchers.IO` in `MainViewModel.exportBackup` / `importBackup`; the UI
@@ -495,6 +496,7 @@ that rewrite is explicitly out of scope for this rebuild.
 
 | Version | Notes |
 |---|---|
+| 1.4.1 (`versionCode` 5) | Copy action moved into each Activity row, quick-action corner "+" removed, saved fee included in backup v5. |
 | 1.4 (`versionCode` 4) | Schema v4 (`starting_balance`, checks), transaction edit/backdate/detail, bulk delete, undo snackbar, wallet filter, backup preview/info, consistency audit, dark theme, adaptive icon, nav rail, Compose UI tests. |
 | 1.3 (`versionCode` 3) | Transfer log, saved global fee, Pengaturan redesign, calendar Activity, report stat dashboard, copy blocks, Windows build guide. |
 | 1.2 (`versionCode` 2) | Live monthly report, automatic/manual snapshots (schema v2), load error state. |

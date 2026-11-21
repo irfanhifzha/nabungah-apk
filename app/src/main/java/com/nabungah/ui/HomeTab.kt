@@ -378,13 +378,6 @@ private fun QuickActionTile(action: QuickAction, onClick: () -> Unit) {
                     modifier = Modifier.size(20.dp),
                 )
             }
-            Spacer(Modifier.weight(1f))
-            Icon(
-                Icons.Default.Add,
-                contentDescription = "Gunakan ${action.title}",
-                tint = accent.copy(alpha = 0.75f),
-                modifier = Modifier.size(18.dp),
-            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(

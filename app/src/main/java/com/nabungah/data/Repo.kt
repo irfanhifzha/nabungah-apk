@@ -698,12 +698,13 @@ class Repo(context: Context) {
 
     // --------------------------------------------------------------- backup
 
-    /** Serializes every table to one JSON document (schema version 4). */
+    /** Serializes every table and the saved fee to one JSON document (schema version 5). */
     fun exportJson(): String {
         val root = JSONObject()
         root.put("app", BACKUP_APP)
         root.put("version", BACKUP_VERSION)
         root.put("exportedAt", System.currentTimeMillis())
+        root.put("feePercent", feePercent())
 
         val wallets = JSONArray()
         db.query("wallet", null, null, null, null, null, "id ASC").use { c ->
@@ -828,9 +829,14 @@ class Repo(context: Context) {
             throw ValidationException("Versi backup tidak didukung")
         }
         fun size(key: String): Int = root.optJSONArray(key)?.length() ?: 0
+        val fee = root.optDouble("feePercent", DEFAULT_FEE_PERCENT)
+        if (fee.isNaN() || fee < 0 || fee > 100) {
+            throw ValidationException("Persentase biaya tidak valid")
+        }
         return BackupPreview(
             version = version,
             exportedAt = root.optLong("exportedAt", 0),
+            feePercent = fee,
             wallets = size("wallets"),
             transactions = size("transactions"),
             transfers = size("transfers"),
@@ -866,6 +872,14 @@ class Repo(context: Context) {
         // v1 files predate snapshot sources; their snapshots are treated as manual.
         if (version !in 1..BACKUP_VERSION) {
             throw ValidationException("Versi backup tidak didukung")
+        }
+        val importedFee = if (version >= 5) {
+            root.optDouble("feePercent", DEFAULT_FEE_PERCENT)
+        } else {
+            DEFAULT_FEE_PERCENT
+        }
+        if (importedFee.isNaN() || importedFee < 0 || importedFee > 100) {
+            throw ValidationException("Persentase biaya tidak valid")
         }
 
         val walletRows = mutableListOf<ContentValues>()
@@ -1089,6 +1103,7 @@ class Repo(context: Context) {
         } finally {
             db.endTransaction()
         }
+        saveFeePercent(importedFee)
     }
 
     private fun Cursor.longOf(column: String): Long = getLong(getColumnIndexOrThrow(column))
@@ -1096,7 +1111,7 @@ class Repo(context: Context) {
 
     companion object {
         private const val BACKUP_APP = "nabungah"
-        private const val BACKUP_VERSION = 4
+        private const val BACKUP_VERSION = 5
         private const val PREFS_NAME = "nabungah_sync"
         private const val KEY_LAST_AUTO_MONTH = "last_auto_month"
         private const val KEY_FEE_PERCENT = "fee_percent"

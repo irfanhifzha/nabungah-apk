@@ -64,7 +64,7 @@ fun TransactionRow(
         .fillMaxWidth()
         .appCard()
         .then(if (onClick != null) Modifier.pressableCard(onClick = onClick) else Modifier)
-        .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp)
+        .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 10.dp)
     Column(modifier = card) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (selectionActive) {
@@ -111,18 +111,21 @@ fun TransactionRow(
                     )
                 }
             }
-            Text(
-                text = (if (trx.type == "income") "+ " else "- ") + Fmt.rp(trx.amount),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (trx.type == "income") IncomeGreen else ExpenseRed,
-                modifier = Modifier.padding(top = 2.dp, start = 10.dp),
-                maxLines = 1,
-            )
-        }
-        if (!selectionActive) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                CopyButton(text = trxCopyText(trx, walletName))
+            Column(
+                modifier = Modifier.padding(start = 10.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = (if (trx.type == "income") "+ " else "- ") + Fmt.rp(trx.amount),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (trx.type == "income") IncomeGreen else ExpenseRed,
+                    maxLines = 1,
+                )
+                if (!selectionActive) {
+                    CopyButton(text = trxCopyText(trx, walletName))
+                }
             }
         }
     }

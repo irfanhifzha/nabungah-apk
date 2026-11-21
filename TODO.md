@@ -1,7 +1,7 @@
 # TODO — Nabungah
 
 Ide perbaikan, diurutkan dari yang paling dekat sampai jangka panjang.
-Terakhir diperbarui: 21 November 2026 · versi 1.4 (`versionCode` 4).
+Terakhir diperbarui: 21 November 2026 · versi 1.4.1 (`versionCode` 5).
 
 **Cara pakai**
 

@@ -239,7 +239,7 @@ Shows:
   Transfers and goals never change the total, so this reconstruction is exact unless a wallet was
   deleted (which removes balance without a transaction).
 - **Average expense** and the top three expense titles for the month.
-- **Fee %** — a saved global setting, default **2.5**, editable from Settings or the Review fee card.
+- **Fee %** — a saved global setting, default **2.5**, editable from Settings or the Review fee card. It is included in JSON backup/restore (backup v5+).
 - **Fee Expense** = `round(Total Income × Fee % / 100)`; purely informational, not deducted anywhere.
 - **Status** — `Running month` (current month, never auto-saved), `Automatic` (maintained by the app),
   `Manual` (frozen by the user), or `Not saved`.

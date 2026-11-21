@@ -404,20 +404,24 @@ class RepoTest {
     fun backupPreviewAndStartingBalanceRoundTrip() {
         repo.addWallet("Cash", 100_000)
         repo.addTransaction("Kopi", 20_000, "expense", walletId("Cash"), "")
+        repo.saveFeePercent(7.5)
 
         val json = repo.exportJson()
         val preview = repo.inspectBackup(json)
-        assertEquals(4, preview.version)
+        assertEquals(5, preview.version)
+        assertEquals(7.5, preview.feePercent, 0.0001)
         assertEquals(1, preview.wallets)
         assertEquals(1, preview.transactions)
 
         repo.deleteAllTransactions()
         repo.deleteAllWallets()
+        repo.saveFeePercent(2.5)
         repo.importJson(json)
 
         val wallet = repo.load().wallets.single()
         assertEquals(100_000L, wallet.startingBalance)
         assertEquals(80_000L, wallet.balance)
+        assertEquals(7.5, repo.load().feePercent, 0.0001)
     }
 
     @Test

@@ -86,6 +86,7 @@ data class AppData(
 data class BackupPreview(
     val version: Int,
     val exportedAt: Long,
+    val feePercent: Double = 2.5,
     val wallets: Int,
     val transactions: Int,
     val transfers: Int,

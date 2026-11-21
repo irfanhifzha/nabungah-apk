@@ -91,6 +91,9 @@ INI RENCANA UNTUK VERSI `1.3`.
 - [x] Build 1.4: 14 unit test lulus, compile androidTest sukses, `assembleDebug` dan
   `assembleRelease` sukses. APK rilis 1.533.314 byte, bertanda tangan `CN=Nabungah`.
   Belum ada commit/push/tag untuk batch ini.
+- [x] Batch 1.4.1: tombol Salin di baris Aktivitas dipindah ke sisi nominal, ikon "+" di kartu
+  Aksi Cepat dihapus, biaya global ikut diekspor/diimpor (backup v5), dan versi naik ke
+  `versionCode` 5 / `1.4.1`. Build release 1.549.702 byte, bertanda tangan `CN=Nabungah`.
 - [ ] Ditunda dan butuh keputusan produk/pekerjaan terpisah: grafik, kategori/tag, widget,
   layout dua kolom tablet, uji perangkat fisik (TalkBack/font scale/cold start).
 - [ ] ...
