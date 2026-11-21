@@ -23,14 +23,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var loaded by mutableStateOf(false)
         private set
 
+    var loadError by mutableStateOf<String?>(null)
+        private set
+
     init {
         reload()
     }
 
     fun reload() {
         viewModelScope.launch {
-            data = withContext(Dispatchers.IO) { repo.load() }
-            loaded = true
+            loadError = null
+            try {
+                data = withContext(Dispatchers.IO) {
+                    // Cheap no-op unless the calendar month changed since the last run.
+                    repo.syncAutoSnapshots()
+                    repo.load()
+                }
+                loaded = true
+            } catch (e: Exception) {
+                loadError = e.message ?: "Could not open the local database"
+                loaded = true
+            }
         }
     }
 
@@ -114,11 +127,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         totalExpense: Long,
         feePercent: Double,
         feeExpense: Long,
+        source: String,
         onError: (String) -> Unit,
         onDone: () -> Unit,
     ) = write(onError, onDone) {
-        it.upsertSnapshot(month, totalBalance, totalIncome, totalExpense, feePercent, feeExpense)
+        it.upsertSnapshot(
+            month, totalBalance, totalIncome, totalExpense, feePercent, feeExpense, source,
+        )
     }
+
+    /** Recomputes a month from its transactions and hands it back to the automatic flow. */
+    fun resetSnapshotToAuto(month: String, onError: (String) -> Unit, onDone: () -> Unit) =
+        write(onError, onDone) {
+            if (month == it.todayMonth()) it.deleteSnapshot(month) else it.refreshAutoSnapshot(month)
+        }
 
     fun deleteSnapshot(month: String, onError: (String) -> Unit = {}) =
         write(onError) { it.deleteSnapshot(month) }

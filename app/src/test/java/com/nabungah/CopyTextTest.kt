@@ -94,6 +94,7 @@ class CopyTextTest {
         )
         val expected = """
             *📅 Data Statistik Bulan: 2026-11*
+            🔁 Source: Manual
             💰 Total Income: Rp 1.500.000
             💸 Total Expense: Rp 20.000
             💼 Total Balance: Rp 130.000

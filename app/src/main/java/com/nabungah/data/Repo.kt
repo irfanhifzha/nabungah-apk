@@ -15,7 +15,8 @@ class ValidationException(message: String) : Exception(message)
 
 class Repo(context: Context) {
 
-    private val helper = NabungDb(context)
+    private val appContext = context.applicationContext
+    private val helper = NabungDb(appContext)
     private val db: SQLiteDatabase get() = helper.writableDatabase
 
     fun close() = helper.close()
@@ -109,6 +110,7 @@ class Repo(context: Context) {
                             feePercent = c.getDouble(c.getColumnIndexOrThrow("fee_percent")),
                             feeExpense = c.getLong(c.getColumnIndexOrThrow("fee_expense")),
                             updatedAt = c.getLong(c.getColumnIndexOrThrow("updated_at")),
+                            source = c.getString(c.getColumnIndexOrThrow("source")),
                         )
                     )
                 }
@@ -461,7 +463,8 @@ class Repo(context: Context) {
                         .put("total_expense", c.longOf("total_expense"))
                         .put("fee_percent", c.getDouble(c.getColumnIndexOrThrow("fee_percent")))
                         .put("fee_expense", c.longOf("fee_expense"))
-                        .put("updated_at", c.longOf("updated_at")),
+                        .put("updated_at", c.longOf("updated_at"))
+                        .put("source", c.stringOf("source")),
                 )
             }
         }
@@ -483,7 +486,9 @@ class Repo(context: Context) {
         if (root.optString("app") != BACKUP_APP) {
             throw ValidationException("Not a Nabungah backup file")
         }
-        if (root.optInt("version", 0) != BACKUP_VERSION) {
+        val version = root.optInt("version", 0)
+        // v1 files predate snapshot sources; their snapshots are treated as manual.
+        if (version !in 1..BACKUP_VERSION) {
             throw ValidationException("Unsupported backup version")
         }
 
@@ -569,6 +574,12 @@ class Repo(context: Context) {
                         put("fee_percent", o.optDouble("fee_percent", 2.5))
                         put("fee_expense", o.getLong("fee_expense"))
                         put("updated_at", o.getLong("updated_at"))
+                        val source = if (version >= 2) o.optString("source", Snapshot.SOURCE_MANUAL)
+                        else Snapshot.SOURCE_MANUAL
+                        if (source != Snapshot.SOURCE_AUTO && source != Snapshot.SOURCE_MANUAL) {
+                            throw ValidationException("Invalid backup file")
+                        }
+                        put("source", source)
                     },
                 )
             }
@@ -601,7 +612,10 @@ class Repo(context: Context) {
 
     companion object {
         private const val BACKUP_APP = "nabungah"
-        private const val BACKUP_VERSION = 1
+        private const val BACKUP_VERSION = 2
+        private const val PREFS_NAME = "nabungah_sync"
+        private const val KEY_LAST_AUTO_MONTH = "last_auto_month"
+        private const val DEFAULT_FEE_PERCENT = 2.5
     }
 
     // ------------------------------------------------------------ snapshots
@@ -614,9 +628,13 @@ class Repo(context: Context) {
         totalExpense: Long,
         feePercent: Double,
         feeExpense: Long,
+        source: String = Snapshot.SOURCE_MANUAL,
     ) {
         val key = month.trim()
         if (key.isEmpty()) throw ValidationException("Month is required")
+        if (source != Snapshot.SOURCE_AUTO && source != Snapshot.SOURCE_MANUAL) {
+            throw ValidationException("Unknown snapshot source")
+        }
         db.insertWithOnConflict(
             "month_snapshot", null,
             ContentValues().apply {
@@ -627,8 +645,144 @@ class Repo(context: Context) {
                 put("fee_percent", feePercent)
                 put("fee_expense", feeExpense)
                 put("updated_at", System.currentTimeMillis())
+                put("source", source)
             },
             SQLiteDatabase.CONFLICT_REPLACE,
+        )
+    }
+
+    /**
+     * Freezes every finished month from its transactions. Runs at most once per calendar month
+     * (and on first launch after an upgrade), so it is cheap to call before every reload.
+     *
+     * - Months before the current one get (or refresh) an `auto` snapshot.
+     * - `manual` snapshots are never touched.
+     * - `auto` snapshots of months that no longer have transactions are removed.
+     *
+     * @return true when the app wrote something.
+     */
+    fun syncAutoSnapshots(force: Boolean = false): Boolean {
+        val currentMonth = Fmt.monthKey(System.currentTimeMillis())
+        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val lastMonth = prefs.getString(KEY_LAST_AUTO_MONTH, null)
+        if (!force && lastMonth == currentMonth) return false
+        // First run (fresh install or upgrade to 1.2) backfills every finished month. Later
+        // rollovers only touch months the app has not seen yet, so deleting an old snapshot stays
+        // deleted instead of being recreated on the next month change.
+        val backfill = lastMonth == null
+
+        // Totals per completed month.
+        val totals = db.rawQuery(
+            """
+            SELECT month,
+                   COALESCE(SUM(CASE WHEN type = 'income'  THEN amount ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
+            FROM trx WHERE month < ? GROUP BY month ORDER BY month ASC
+            """.trimIndent(),
+            arrayOf(currentMonth),
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(Triple(c.getString(0), c.getLong(1), c.getLong(2)))
+            }
+        }
+
+        val totalBalance = db.rawQuery("SELECT COALESCE(SUM(balance), 0) FROM wallet", null)
+            .use { if (it.moveToFirst()) it.getLong(0) else 0L }
+
+        // Balance at the end of month M = today's balance minus every transaction after M.
+        val netAfter = HashMap<String, Long>()
+        var laterNet = 0L
+        for ((month, income, expense) in totals.asReversed()) {
+            netAfter[month] = laterNet
+            laterNet += income - expense
+        }
+
+        data class Saved(val month: String, val feePercent: Double, val source: String)
+        val existing = db.query(
+            "month_snapshot", arrayOf("month", "fee_percent", "source"),
+            null, null, null, null, null,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(Saved(c.getString(0), c.getDouble(1), c.getString(2)))
+                }
+            }
+        }.associateBy { it.month }
+
+        var changed = false
+        db.beginTransaction()
+        try {
+            for ((month, income, expense) in totals) {
+                if (!backfill && !force && month <= lastMonth) continue
+                val saved = existing[month]
+                if (saved != null && saved.source == Snapshot.SOURCE_MANUAL) continue
+                val feePercent = saved?.feePercent ?: DEFAULT_FEE_PERCENT
+                upsertSnapshot(
+                    month = month,
+                    totalBalance = totalBalance - (netAfter[month] ?: 0L),
+                    totalIncome = income,
+                    totalExpense = expense,
+                    feePercent = feePercent,
+                    feeExpense = Fmt.feeExpense(income, feePercent),
+                    source = Snapshot.SOURCE_AUTO,
+                )
+                changed = true
+            }
+
+            // Auto history for months that no longer have transactions.
+            for (saved in existing.values) {
+                if (saved.source == Snapshot.SOURCE_AUTO &&
+                    saved.month < currentMonth &&
+                    totals.none { it.first == saved.month }
+                ) {
+                    deleteSnapshot(saved.month)
+                    changed = true
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+
+        prefs.edit().putString(KEY_LAST_AUTO_MONTH, currentMonth).apply()
+        return changed
+    }
+
+    fun todayMonth(): String = Fmt.monthKey(System.currentTimeMillis())
+
+    /** Recomputes one month from its transactions, keeping the fee already chosen for it. */
+    fun refreshAutoSnapshot(month: String) {
+        val key = month.trim()
+        if (key.isEmpty()) throw ValidationException("Month is required")
+
+        val (income, expense) = db.rawQuery(
+            """
+            SELECT COALESCE(SUM(CASE WHEN type = 'income'  THEN amount ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
+            FROM trx WHERE month = ?
+            """.trimIndent(),
+            arrayOf(key),
+        ).use { if (it.moveToFirst()) it.getLong(0) to it.getLong(1) else 0L to 0L }
+
+        val totalBalance = db.rawQuery("SELECT COALESCE(SUM(balance), 0) FROM wallet", null)
+            .use { if (it.moveToFirst()) it.getLong(0) else 0L }
+        val netAfter = db.rawQuery(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) " +
+                "FROM trx WHERE month > ?",
+            arrayOf(key),
+        ).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+        val feePercent = db.rawQuery(
+            "SELECT fee_percent FROM month_snapshot WHERE month = ?", arrayOf(key),
+        ).use { if (it.moveToFirst()) it.getDouble(0) else DEFAULT_FEE_PERCENT }
+
+        upsertSnapshot(
+            month = key,
+            totalBalance = totalBalance - netAfter,
+            totalIncome = income,
+            totalExpense = expense,
+            feePercent = feePercent,
+            feeExpense = Fmt.feeExpense(income, feePercent),
+            source = Snapshot.SOURCE_AUTO,
         )
     }
 

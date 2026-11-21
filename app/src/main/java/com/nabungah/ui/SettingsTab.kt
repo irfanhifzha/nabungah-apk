@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.nabungah.BuildConfig
 import com.nabungah.data.AppData
 import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
@@ -189,7 +190,7 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         item {
             SectionCard(title = "About") {
                 Text(
-                    text = "Nabungah 1.0",
+                    text = "Nabungah ${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                 )

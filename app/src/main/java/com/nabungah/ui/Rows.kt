@@ -23,7 +23,7 @@ import com.nabungah.data.Trx
 
 /** Label on the left, right-aligned amount. Shared by cards and snapshot rows. */
 @Composable
-fun AmountRow(label: String, amount: Long, color: Color, prefix: String = "") {
+fun AmountRow(label: String, amount: Long, color: Color, prefix: String = "", money: Boolean = true) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -37,7 +37,7 @@ fun AmountRow(label: String, amount: Long, color: Color, prefix: String = "") {
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = prefix + Fmt.rp(amount),
+            text = prefix + if (money) Fmt.rp(amount) else amount.toString(),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = color,
@@ -110,6 +110,12 @@ fun SnapshotRow(snapshot: Snapshot) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (snapshot.isManual) "Manual" else "Auto",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (snapshot.isManual) StatusOrange else IncomeGreen,
+                modifier = Modifier.padding(end = 2.dp),
             )
             CopyButton(text = snapshotCopyText(snapshot))
         }

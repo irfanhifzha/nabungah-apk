@@ -2,6 +2,7 @@ package com.nabungah.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -29,9 +31,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
@@ -43,7 +47,13 @@ sealed interface Sheet {
     data object AddGoal : Sheet
     data class EditGoal(val goal: Goal) : Sheet
     data object Transfer : Sheet
-    data class Sync(val feeDraft: String = "2,5") : Sheet
+    data class EditReport(
+        val month: String,
+        val income: Long,
+        val expense: Long,
+        val balance: Long,
+        val fee: String,
+    ) : Sheet
     data object DeleteWallets : Sheet
     data object DeleteTransactions : Sheet
     data object DeleteQuickActions : Sheet
@@ -73,6 +83,27 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
         // the app canvas, so no spinner or Material composition is needed while the
         // first database read completes off the main thread.
         Box(modifier.fillMaxSize().background(CanvasBg))
+        return
+    }
+
+    val loadError = vm.loadError
+    if (loadError != null) {
+        Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Could not open your data",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = loadError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+                Button(onClick = { vm.reload() }) { Text("Try again") }
+            }
+        }
         return
     }
 
@@ -137,7 +168,14 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
                 is Sheet.AddGoal -> AddGoalSheet(vm) { sheet = null }
                 is Sheet.EditGoal -> EditGoalSheet(vm, current.goal) { sheet = null }
                 is Sheet.Transfer -> TransferSheet(vm, data.wallets) { sheet = null }
-                is Sheet.Sync -> SyncSheet(vm, feeDraft = current.feeDraft) { sheet = null }
+                is Sheet.EditReport -> EditReportSheet(
+                    vm = vm,
+                    month = current.month,
+                    initialIncome = current.income,
+                    initialExpense = current.expense,
+                    initialBalance = current.balance,
+                    feeDraft = current.fee,
+                ) { sheet = null }
                 is Sheet.DeleteWallets -> DeleteWalletsSheet(vm, data.wallets) { sheet = null }
                 is Sheet.DeleteTransactions -> DeleteTransactionsSheet(
                     vm = vm,

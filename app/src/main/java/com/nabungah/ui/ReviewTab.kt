@@ -42,8 +42,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.AppData
+import com.nabungah.data.Snapshot
 
-/** Review: one month at a time, with the fee figure and saved snapshots. */
+/**
+ * Monthly report: every figure comes from that month's transactions, so the selected month is
+ * always live. Completed months also get an automatic snapshot when the calendar month rolls
+ * over; editing a month by hand freezes it as `manual` until the user switches it back.
+ */
 @Composable
 fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     val months = remember(data.transactions, data.snapshots, data.currentMonth) {
@@ -54,7 +59,6 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     var month by rememberSaveable { mutableStateOf(data.currentMonth) }
     var fee by rememberSaveable { mutableStateOf("2,5") }
     var message by remember { mutableStateOf<String?>(null) }
-    var confirmSave by remember { mutableStateOf(false) }
 
     LaunchedEffect(months) {
         if (month !in months) month = months.firstOrNull() ?: data.currentMonth
@@ -63,31 +67,43 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         if (month.isEmpty()) month = data.currentMonth
     }
 
-    val monthTrx = remember(data.transactions, month) {
-        data.transactions.filter { it.month == month }
-    }
-    val income = remember(monthTrx) { monthTrx.filter { it.type == "income" }.sumOf { it.amount } }
-    val expense = remember(monthTrx) { monthTrx.filter { it.type == "expense" }.sumOf { it.amount } }
-    val net = income - expense
-    val feePercent = Fmt.parseFee(fee)
-    val feeExpense = Fmt.feeExpense(income, feePercent)
     val snapshot = data.snapshots.firstOrNull { it.month == month }
+    // A saved month remembers its fee; everything else starts from the 2.5% default.
+    LaunchedEffect(month, snapshot?.feePercent) {
+        fee = snapshot?.let { Fmt.feePercentLabel(it.feePercent) } ?: "2,5"
+    }
+    LaunchedEffect(month) { message = null }
+
+    val feePercent = Fmt.parseFee(fee)
+    val report = remember(data.transactions, data.totalBalance, month, feePercent) {
+        buildMonthReport(month, data.transactions, data.totalBalance, feePercent)
+    }
+
+    val isCurrentMonth = month == data.currentMonth
+    val isManual = snapshot?.isManual == true
+    val isAuto = snapshot?.source == Snapshot.SOURCE_AUTO
+    val differs = snapshot != null && (
+        snapshot.totalIncome != report.income ||
+            snapshot.totalExpense != report.expense ||
+            snapshot.totalBalance != report.balance ||
+            kotlin.math.abs(snapshot.feePercent - report.feePercent) > 0.0001
+        )
 
     val index = months.indexOf(month)
     val older = months.getOrNull(index + 1)
     val newer = if (index > 0) months[index - 1] else null
 
-    fun saveReview() {
-        val label = Fmt.monthLabel(month)
-        vm.upsertSnapshot(
+    fun resetToAuto() {
+        vm.resetSnapshotToAuto(
             month = month,
-            totalBalance = data.totalBalance,
-            totalIncome = income,
-            totalExpense = expense,
-            feePercent = feePercent,
-            feeExpense = feeExpense,
             onError = { message = it },
-            onDone = { message = "Saved review for $label." },
+            onDone = {
+                message = if (isCurrentMonth) {
+                    "This month is live again; it will be saved automatically next month."
+                } else {
+                    "Automatic report refreshed for ${Fmt.monthLabel(month)}."
+                }
+            },
         )
     }
 
@@ -104,96 +120,93 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Look back, check the fee, save the month.",
+                    text = "Monthly report from your transactions, plus the fee you should set aside.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
             }
         }
 
+        item { MonthSwitcher(month, report.count, older, newer, onOlder = { month = it }, onNewer = { month = it }) }
+
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.White)
-                    .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { older?.let { month = it; message = null } }, enabled = older != null) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Earlier month")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusChip(
+                    label = when {
+                        isCurrentMonth -> "Running month"
+                        isManual -> "Manual"
+                        isAuto -> "Automatic"
+                        else -> "Not saved"
+                    },
+                    color = when {
+                        isCurrentMonth -> MaterialTheme.colorScheme.primary
+                        isManual -> StatusOrange
+                        else -> IncomeGreen
+                    },
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = snapshot?.let { "Saved ${Fmt.timestamp(it.updatedAt)}" }
+                        ?: if (isCurrentMonth) "Live, not saved yet" else "Not saved",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                )
+            }
+        }
+
+        item {
+            SectionCard(title = "Month report") {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatTile(
+                        label = "Income",
+                        value = "+ " + Fmt.rp(report.income),
+                        color = IncomeGreen,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatTile(
+                        label = "Expense",
+                        value = "- " + Fmt.rp(report.expense),
+                        color = ExpenseRed,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = Fmt.monthLabel(month),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
+                Spacer(Modifier.height(10.dp))
+                AmountRow("Net", report.net, if (report.net >= 0) IncomeGreen else ExpenseRed)
+                AmountRow("Balance at month end", report.balance, MaterialTheme.colorScheme.onSurface)
+                AmountRow(
+                    "Transactions",
+                    report.count.toLong(),
+                    MaterialTheme.colorScheme.onSurface,
+                    money = false,
+                )
+                AmountRow(
+                    "Average expense",
+                    report.averageExpense,
+                    MaterialTheme.colorScheme.onSurface,
+                )
+                if (report.topExpenses.isNotEmpty()) {
+                    HorizontalDivider(
+                        color = CardBorder,
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
                     Text(
-                        text = "${monthTrx.size} transaction${if (monthTrx.size == 1) "" else "s"}",
+                        text = "Biggest spending",
                         style = MaterialTheme.typography.labelSmall,
                         color = Muted,
+                        modifier = Modifier.padding(bottom = 2.dp),
                     )
-                }
-                IconButton(onClick = { newer?.let { month = it; message = null } }, enabled = newer != null) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later month")
+                    report.topExpenses.forEach { item ->
+                        AmountRow(item.title, item.total, ExpenseRed, prefix = "- ")
+                    }
                 }
             }
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatTile(
-                    label = "Income",
-                    value = "+ " + Fmt.rp(income),
-                    color = IncomeGreen,
-                    modifier = Modifier.weight(1f),
-                )
-                StatTile(
-                    label = "Expense",
-                    value = "- " + Fmt.rp(expense),
-                    color = ExpenseRed,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.White)
-                    .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Net this month", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        text = "Income minus expense",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Muted,
-                    )
-                }
+            SectionCard(title = "Fee for the month") {
                 Text(
-                    text = (if (net >= 0) "+ " else "- ") + Fmt.rp(kotlin.math.abs(net)),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (net >= 0) IncomeGreen else ExpenseRed,
-                )
-            }
-        }
-
-        item {
-            SectionCard(title = "Fee calculator") {
-                Text(
-                    text = "Informational only. The fee is recorded in a snapshot, never deducted from a wallet.",
+                    text = "Informational only. The fee is what you should set aside from income this " +
+                        "month; it is never deducted from a wallet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
@@ -215,32 +228,78 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                             color = Muted,
                         )
                         Text(
-                            text = Fmt.rp(feeExpense),
+                            text = Fmt.rp(report.feeExpense),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        Text(
+                            text = "${Fmt.feePercentLabel(report.feePercent)}% of ${Fmt.rp(report.income)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted,
+                        )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = CardBorder)
-                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        item {
+            SectionCard(title = "Save or edit") {
+                if (isCurrentMonth) {
+                    Text(
+                        text = "This month keeps updating live. When the month ends, it is saved " +
+                            "automatically and appears in Saved months.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                } else if (isAuto) {
+                    Text(
+                        text = "Saved automatically from transactions. It only changes when you edit it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                } else if (isManual) {
+                    Text(
+                        text = "This month is frozen with your manual numbers. Automatic updates skip it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+
                 Button(
-                    onClick = { if (snapshot != null) confirmSave = true else saveReview() },
+                    onClick = {
+                        onSheet(
+                            Sheet.EditReport(
+                                month = month,
+                                income = report.income,
+                                expense = report.expense,
+                                balance = report.balance,
+                                fee = Fmt.feePercentLabel(report.feePercent),
+                            ),
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                 ) {
-                    Text(if (snapshot != null) "Update snapshot" else "Save review")
+                    Text(if (snapshot == null) "Save this month manually" else "Edit report manually")
                 }
-                TextButton(
-                    onClick = { onSheet(Sheet.Sync(fee)) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Enter numbers manually")
+
+                if (isManual) {
+                    TextButton(onClick = { resetToAuto() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Switch back to automatic")
+                    }
                 }
-                if (snapshot != null) {
+                if (isAuto && differs) {
+                    TextButton(onClick = { resetToAuto() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Refresh automatic report")
+                    }
+                }
+                if (isAuto && differs) {
                     Text(
-                        text = "A snapshot for this month already exists. Saving overwrites it.",
+                        text = "The saved snapshot differs from the transactions shown above.",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Muted,
+                        color = StatusOrange,
                     )
                 }
                 if (message != null) {
@@ -266,8 +325,9 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         if (data.snapshots.isEmpty()) {
             item {
                 EmptyState(
-                    title = "No saved months",
-                    body = "Save a review to keep a fixed record of that month.",
+                    title = "No saved months yet",
+                    body = "Finished months are saved automatically the first time the app opens in " +
+                        "a new month. You can also save one manually above.",
                 )
             }
         } else {
@@ -276,15 +336,61 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             }
         }
     }
+}
 
-    if (confirmSave) {
-        ConfirmDialog(
-            title = "Update snapshot?",
-            message = "The ${Fmt.monthLabel(month)} snapshot will be overwritten with the numbers shown now.",
-            confirmLabel = "Update",
-            destructive = false,
-            onConfirm = { saveReview() },
-            onDismiss = { confirmSave = false },
-        )
+@Composable
+private fun MonthSwitcher(
+    month: String,
+    count: Int,
+    older: String?,
+    newer: String?,
+    onOlder: (String) -> Unit,
+    onNewer: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = { older?.let(onOlder) }, enabled = older != null) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Earlier month")
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = Fmt.monthLabel(month),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = "$count transaction${if (count == 1) "" else "s"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
+        }
+        IconButton(onClick = { newer?.let(onNewer) }, enabled = newer != null) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later month")
+        }
     }
+}
+
+@Composable
+private fun StatusChip(label: String, color: Color) {
+    Text(
+        text = label.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }

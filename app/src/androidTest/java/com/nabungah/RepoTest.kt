@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nabungah.data.Repo
+import com.nabungah.data.Snapshot
 import com.nabungah.data.ValidationException
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -191,6 +192,7 @@ class RepoTest {
         assertEquals(9_000L, snapshots[0].totalBalance)
         assertEquals(8_000L, snapshots[0].totalIncome)
         assertEquals(200L, snapshots[0].feeExpense)
+        assertTrue(snapshots[0].isManual) // upserts without a source are manual by default
 
         repo.deleteSnapshot("2026-11")
         assertEquals(1, repo.load().snapshots.size)
@@ -238,6 +240,35 @@ class RepoTest {
         assertEquals(5_000_000L, restored.goals.single().targetAmount)
         assertEquals(80_000L, restored.snapshots.single().totalBalance)
         assertEquals(2.5, restored.snapshots.single().feePercent, 0.0001)
+        assertTrue(restored.snapshots.single().isManual)
+    }
+
+    @Test
+    fun autoSnapshotsRoundTripThroughBackup() {
+        repo.upsertSnapshot("2026-09", 10_000, 5_000, 1_000, 2.5, 125, Snapshot.SOURCE_AUTO)
+
+        val restored = run {
+            val json = repo.exportJson()
+            repo.deleteAllSnapshots()
+            repo.importJson(json)
+            repo.load().snapshots.single()
+        }
+
+        assertEquals(Snapshot.SOURCE_AUTO, restored.source)
+        assertEquals(5_000L, restored.totalIncome)
+    }
+
+    @Test
+    fun autoSyncNeverOverwritesManualSnapshots() {
+        repo.upsertSnapshot("2026-01", 1, 2, 3, 2.5, 4, Snapshot.SOURCE_MANUAL)
+
+        repo.syncAutoSnapshots(force = true)
+
+        val saved = repo.load().snapshots.single()
+        assertEquals("2026-01", saved.month)
+        assertTrue(saved.isManual)
+        assertEquals(1L, saved.totalBalance)
+        assertEquals(3L, saved.totalExpense)
     }
 
     @Test

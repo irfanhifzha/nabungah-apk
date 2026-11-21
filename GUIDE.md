@@ -226,43 +226,74 @@ Consequences to preserve:
 Defaults to **the device's current month** and can step to any month that has a transaction or a
 saved snapshot. It is independent of the Activity tab's filters.
 
+All numbers are **derived live from that month's transactions**, so the selected month is always
+the truth, including the current month while it is still running.
+
 Shows:
 - The selected month (`{YYYY-MM}`) and its transaction count.
-- **Total Balance** = sum of all wallet balances (all-time, not month-scoped).
-- **Total Income** = sum of income transactions whose month = current month.
-- **Total Expense** = sum of expense transactions whose month = current month.
-- **Net** = Total Income − Total Expense for the selected month.
-- **Fee %** — editable, default **2.5**, persisted only through the snapshot flow.
+- **Total Income** / **Total Expense** = sum of that month's transactions by type.
+- **Net** = Total Income − Total Expense.
+- **Balance at month end** = today's total balance minus every transaction after that month.
+  Transfers and goals never change the total, so this reconstruction is exact unless a wallet was
+  deleted (which removes balance without a transaction).
+- **Average expense** and the top three expense titles for the month.
+- **Fee %** — editable, default **2.5** (a saved month reopens with its own fee).
 - **Fee Expense** = `round(Total Income × Fee % / 100)`; purely informational, not deducted anywhere.
-- **Save review** (upsert) writes the snapshot for the selected month (§9); an existing snapshot asks before it is overwritten.
-- **Enter numbers manually** opens the Sync Month dialog (§9) for balance/income/expense overrides.
+- **Status** — `Running month` (current month, never auto-saved), `Automatic` (maintained by the app),
+  `Manual` (frozen by the user), or `Not saved`.
+- **Save this month manually / Edit report manually** opens the report editor (§9). Saving marks the
+  month `manual` and stops automatic updates for it.
+- **Switch back to automatic** recomputes a manual month from its transactions (or deletes the
+  current month's snapshot, since the current month stays live).
 
 Rebuild notes:
-- Recompute from the database on any data change; these are derived values, never stored.
-- The fee percentage is a **draft** in the Review tab until saved into a snapshot. Do not persist it as a global setting unless you explicitly decide to (the original resets to 2.5 on reload).
-- Accept decimal fee input (e.g. `2,5`). The original stripped the decimal character, making 2.5 untypeable — fix it.
+- Recompute from the database on any data change; these are derived values, never stored — except
+  the snapshot itself.
+- The fee percentage is a **draft** in the Review tab until saved into a snapshot. Do not persist it
+  as a global setting unless you explicitly decide to (the original resets to 2.5 on reload).
+- Accept decimal fee input (e.g. `2,5`). The original stripped the decimal character, making 2.5
+  untypeable — fix it.
 
 ---
 
-## 9. Monthly History — manual snapshots
+## 9. Monthly History — automatic snapshots, manually overridable
 
-A snapshot freezes one month's totals.
+A snapshot freezes one finished month's totals. Snapshots are **automatic by default** and may be
+edited by hand.
 
-### Sync dialog
-- Pre-filled with the live values: month (current `YYYY-MM`), Total Balance, Total Income, Total Expense, Fee %, Fee Expense.
-- All fields are **editable before saving** — a snapshot is deliberately whatever the user confirms, not necessarily what the transactions produce.
-- Confirmation prompt, then save.
-- **One row per month: month is the primary key.** Saving the same month again overwrites that snapshot (upsert), it does not append. State this in the dialog if space allows.
+### Automatic rollover
+- The first time the app opens in a new calendar month it writes snapshots for every finished month
+  since the last sync (all finished months on a fresh install or an upgrade from 1.1).
+- Values come from transactions: income, expense, the reconstructed month-end balance and a 2.5% fee
+  (or the fee already stored for that month).
+- Existing `manual` snapshots are **never** overwritten.
+- An `auto` snapshot of a month whose transactions no longer exist is removed.
+- A deleted auto snapshot is not recreated on the next month change unless the app has not yet seen
+  that month; history stays deleted.
+- Snapshots store `source` (`auto` | `manual`); v1 databases get `'manual'` via the v2 migration.
+
+### Edit dialog
+- Opened from Review for the **selected month only** (the month is fixed, not typed).
+- Pre-filled with the live values: Total Balance, Total Income, Total Expense, Fee %; Fee Expense is
+  computed from income and fee.
+- All fields are **editable before saving** — a snapshot is deliberately whatever the user confirms,
+  not necessarily what the transactions produce.
+- Saving sets `source = manual` and shows a confirmation explaining that automatic updates will skip
+  the month.
+- **One row per month: month is the primary key.** Saving the same month again overwrites that
+  snapshot (upsert), it does not append.
 - Store `updated_at`.
 
 ### History list
 - Sorted by month descending.
-- Each row shows: month, income (green), expense (red), balance, fee amount with its percentage, and last updated time.
-- Empty state: "No monthly snapshots yet".
+- Each row shows: month, `Auto`/`Manual`, income (green), expense (red), balance, fee amount with its
+  percentage, and last updated time.
+- Empty state explains that finished months are saved automatically.
 - **Copy to clipboard** per row, exact block:
 
 ```
 *📅 Data Statistik Bulan: {month}*
+🔁 Source: {Manual|Automatic}
 💰 Total Income: Rp {totalIncome}
 💸 Total Expense: Rp {totalExpense}
 💼 Total Balance: Rp {totalBalance}
@@ -331,7 +362,9 @@ month_snapshot (
   total_expense INTEGER NOT NULL,
   fee_percent   REAL    NOT NULL DEFAULT 2.5,
   fee_expense   INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL
+  updated_at    INTEGER NOT NULL,
+  source        TEXT    NOT NULL DEFAULT 'manual'
+                CHECK (source IN ('auto','manual'))   -- schema v2
 );
 ```
 
@@ -391,8 +424,8 @@ These are real inconsistencies in the original. Each needs an explicit decision 
 - [ ] Quick Action tap pre-fills the form and does not modify the action.
 - [ ] Goal: create at 0 progress, edit saved/target/status, progress capped at 100%, remove confirmed, wallets untouched.
 - [ ] Tukar Uang: rejects ≤ 1.000, rejects same wallet, checks DB balance, moves money atomically, creates no transaction, Total Balance unchanged.
-- [ ] Monthly Overview: income/expense for the current month only, fee = round(income × %), fee never deducted.
-- [ ] Sync: upserts by month, overwrites on re-sync, editable fields, appears in history sorted newest first; copy block matches §9.
+- [ ] Monthly Review: income/expense/net derived from the selected month, fee = round(income × %), fee never deducted, top spending and month-end balance shown.
+- [ ] Snapshots: finished months become `auto` on a month change, manual edits freeze a month and are never overwritten automatically, switching back to automatic recomputes it; copy block matches §9.
 - [ ] Delete-All operations work in one transaction and are confirmed.
 - [ ] Offline from first launch; cold start < 1 s on low-end hardware; APK size within target.
 

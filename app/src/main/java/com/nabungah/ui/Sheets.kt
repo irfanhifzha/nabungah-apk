@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +52,7 @@ fun trxCopyText(t: Trx, walletName: String): String = buildString {
 
 fun snapshotCopyText(s: Snapshot): String = buildString {
     append("*📅 Data Statistik Bulan: ${s.month}*\n")
+    append("🔁 Source: ${if (s.isManual) "Manual" else "Automatic"}\n")
     append("💰 Total Income: ${Fmt.rp(s.totalIncome)}\n")
     append("💸 Total Expense: ${Fmt.rp(s.totalExpense)}\n")
     append("💼 Total Balance: ${Fmt.rp(s.totalBalance)}\n")
@@ -397,25 +399,35 @@ fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit)
 // ------------------------------------------------------------- sync month
 
 @Composable
-fun SyncSheet(vm: MainViewModel, feeDraft: String, onClose: () -> Unit) {
-    val data = vm.data
-    var month by remember { mutableStateOf(data.currentMonth) }
-    var balance by remember { mutableStateOf(data.totalBalance.toString()) }
-    var income by remember { mutableStateOf(data.monthIncome.toString()) }
-    var expense by remember { mutableStateOf(data.monthExpense.toString()) }
-    var feePercent by remember { mutableStateOf(feeDraft) }
-    var feeExpense by remember {
-        mutableStateOf(
-            Fmt.feeExpense(data.monthIncome, Fmt.parseFee(feeDraft)).toString(),
-        )
-    }
-    var error by remember { mutableStateOf<String?>(null) }
-    var confirm by remember { mutableStateOf(false) }
+fun EditReportSheet(
+    vm: MainViewModel,
+    month: String,
+    initialIncome: Long,
+    initialExpense: Long,
+    initialBalance: Long,
+    feeDraft: String,
+    onClose: () -> Unit,
+) {
+    var balance by rememberSaveable { mutableStateOf(initialBalance.toString()) }
+    var income by rememberSaveable { mutableStateOf(initialIncome.toString()) }
+    var expense by rememberSaveable { mutableStateOf(initialExpense.toString()) }
+    var feePercent by rememberSaveable { mutableStateOf(feeDraft) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirm by rememberSaveable { mutableStateOf(false) }
+
+    val feeExpense = Fmt.feeExpense(Fmt.digitsToLong(income), Fmt.parseFee(feePercent))
 
     SheetColumn {
-        SheetTitle("Sync This Month")
-        SheetNote("Saving the same month again overwrites its snapshot.")
-        LabeledTextField(value = month, onValueChange = { month = it }, label = "Month (YYYY-MM)")
+        SheetTitle("Edit ${Fmt.monthLabel(month)}")
+        SheetNote(
+            "Saving here freezes the month with your own numbers. Automatic updates will skip " +
+                "it until you switch it back to automatic in Review.",
+        )
+        Text(
+            text = "Month: ${Fmt.monthLabel(month)}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
         MoneyField(label = "Total Balance", digits = balance, onDigitsChange = { balance = it })
         MoneyField(label = "Total Income", digits = income, onDigitsChange = { income = it })
         MoneyField(label = "Total Expense", digits = expense, onDigitsChange = { expense = it })
@@ -429,21 +441,20 @@ fun SyncSheet(vm: MainViewModel, feeDraft: String, onClose: () -> Unit) {
             ),
             modifier = Modifier.fillMaxWidth(),
         )
-        MoneyField(
-            label = "Fee Expense",
-            digits = feeExpense,
-            onDigitsChange = { feeExpense = it },
+        Text(
+            text = "Fee on income: ${Fmt.rp(feeExpense)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
         )
         FormError(error)
-        SaveButton("Save Snapshot") {
-            if (month.isBlank()) error = "Month is required" else confirm = true
-        }
+        SaveButton("Save as manual") { confirm = true }
     }
 
     if (confirm) {
         ConfirmDialog(
-            title = "Save snapshot?",
-            message = "Save the $month snapshot? An existing snapshot for this month will be overwritten.",
+            title = "Save manual report?",
+            message = "${Fmt.monthLabel(month)} will be marked manual. Automatic month-end " +
+                "updates will not change it again.",
             confirmLabel = "Save",
             destructive = false,
             onConfirm = {
@@ -453,7 +464,8 @@ fun SyncSheet(vm: MainViewModel, feeDraft: String, onClose: () -> Unit) {
                     totalIncome = Fmt.digitsToLong(income),
                     totalExpense = Fmt.digitsToLong(expense),
                     feePercent = Fmt.parseFee(feePercent),
-                    feeExpense = Fmt.digitsToLong(feeExpense),
+                    feeExpense = feeExpense,
+                    source = Snapshot.SOURCE_MANUAL,
                     onError = { error = it },
                     onDone = onClose,
                 )

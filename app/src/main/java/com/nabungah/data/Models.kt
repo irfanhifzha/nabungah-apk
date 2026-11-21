@@ -40,7 +40,16 @@ data class Snapshot(
     val feePercent: Double,
     val feeExpense: Long,
     val updatedAt: Long,
-)
+    /** "auto" is maintained by the app; "manual" is frozen by the user. */
+    val source: String = SOURCE_MANUAL,
+) {
+    val isManual: Boolean get() = source == SOURCE_MANUAL
+
+    companion object {
+        const val SOURCE_AUTO = "auto"
+        const val SOURCE_MANUAL = "manual"
+    }
+}
 
 data class AppData(
     val wallets: List<Wallet> = emptyList(),

@@ -5,7 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 class NabungDb(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "nabungah.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "nabungah.db", null, 2) {
 
     init {
         // WAL journal mode (the platform's supported way to set it).
@@ -81,13 +81,22 @@ class NabungDb(context: Context) :
                 total_expense INTEGER NOT NULL,
                 fee_percent   REAL    NOT NULL DEFAULT 2.5,
                 fee_expense   INTEGER NOT NULL,
-                updated_at    INTEGER NOT NULL
+                updated_at    INTEGER NOT NULL,
+                source        TEXT    NOT NULL DEFAULT 'manual'
+                              CHECK (source IN ('auto','manual'))
             )
             """.trimIndent()
         )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Version 1 is the initial schema.
+        // v2: snapshots remember whether the app maintains them or the user froze them.
+        // Every snapshot written by v1 was manual, which is the column default.
+        if (oldVersion < 2) {
+            db.execSQL(
+                "ALTER TABLE month_snapshot ADD COLUMN source TEXT NOT NULL DEFAULT 'manual' " +
+                    "CHECK (source IN ('auto','manual'))"
+            )
+        }
     }
 }

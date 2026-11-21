@@ -20,7 +20,8 @@ the implementation that satisfies it.
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Release APK | ~1.2 MB, R8 minified + resource shrunk |
+| Version | 1.2 (`versionCode` 2), schema v2 |
+| Release APK | ~1.3 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
 assets, or background job frameworks; they conflict with the product's reason to exist.
@@ -43,7 +44,8 @@ app/src/main/java/com/nabungah/
     ├── Dashboard.kt         App shell: bottom tabs, FAB, shared Sheet host
     ├── HomeTab.kt           Balance hero, quick entry, wallets, goals, recent list
     ├── TransactionsTab.kt   Search + month/type filters, day-grouped transaction log
-    ├── ReviewTab.kt         Month nav, totals, fee calculator, snapshot saving
+    ├── MonthReport.kt       Pure monthly report math (totals, balance, top spending, fee)
+    ├── ReviewTab.kt         Live month report, fee, auto/manual snapshots, history
     ├── SettingsTab.kt       Backup/restore, wallet & goal setup, delete tools, about
     ├── Rows.kt              Shared TransactionRow, SnapshotRow, AmountRow
     ├── Components.kt        SectionCard, fields, pickers, empty states, dialog
@@ -109,12 +111,13 @@ Rules that keep this safe:
 | Loading flag | `MainViewModel.loaded` | app process |
 | Selected tab | `Dashboard` (`rememberSaveable`, key `home`/`transactions`/`review`/`settings`) | composition + config change |
 | Activity search/filters/limit | `TransactionsTab` (`rememberSaveable`) | composition |
-| Review month + fee draft | `ReviewTab` (`rememberSaveable`, fee default `"2,5"`) | composition |
+| Review month + fee draft | `ReviewTab` (`rememberSaveable`, fee starts from the saved snapshot) | composition |
+| Snapshot source | `month_snapshot.source` (`auto`/`manual`, schema v2) | database |
 | Open sheet / form field values | `Dashboard` + sheet composables | sheet lifetime |
 | Confirmation dialogs | sheet composables (`ConfirmDialog`) | dialog lifetime |
 | Backup status message | `SettingsTab` (`remember`) | composition |
 
-The fee draft intentionally resets to 2.5 on reload/recreation; only snapshots persist a fee.
+The fee draft is not persisted globally: Review reopens with the selected snapshot's fee, else 2.5.
 
 ---
 
@@ -176,8 +179,10 @@ the list shown in the form.
 3. **Goals are decoupled from wallets.** Creating/editing/completing a goal never changes a
    balance or creates a transaction.
 4. **Fee Expense is informational.** It is computed for display/snapshot only and never deducted.
-5. **Snapshots are manual, editable, and upserted by month** (`CONFLICT_REPLACE`); deleting
-   snapshots never touches transactions/wallets, and vice versa.
+5. **Snapshots are automatic but editable, and upserted by month** (`CONFLICT_REPLACE`).
+   Finished months become `auto` snapshots when the calendar month changes; saving an edit marks a
+   month `manual` and auto-sync never overwrites it. Deleting snapshots never touches
+   transactions/wallets, and vice versa.
 6. **No editing of wallets or transactions** and no rename; only add/delete (goals are the one
    editable entity).
 7. **"Current month" for Monthly Overview comes from the device clock**, independent of the
@@ -194,15 +199,15 @@ Storage Access Framework — no storage permissions and no external dependencies
   `nabungah-backup-yyyyMMdd-HHmm.json` (`Fmt.backupFileName`). `Repo.exportJson()` serializes every
   table with stable ids and a header:
   ```json
-  { "app": "nabungah", "version": 1, "exportedAt": 0,
+  { "app": "nabungah", "version": 2, "exportedAt": 0,
     "wallets": [...], "transactions": [...], "quickActions": [...],
-    "goals": [...], "snapshots": [...] }
+    "goals": [...], "snapshots": [{ ..., "source": "auto" }] }
   ```
 - **Import** is destructive and always confirmed first: it **replaces** all local data rather than
   merging. `Repo.importJson()` parses and validates the whole document *before* opening the write
   transaction, so a malformed file cannot wipe the database. Header (`app`), `version` (currently
-  `1`) and every row are validated; DB constraints are the final guard and roll the transaction
-  back.
+  `2`; `1` is still accepted, with its snapshots treated as manual) and every row are validated;
+  DB constraints are the final guard and roll the transaction back.
 - Wallet ids are preserved so transaction links survive a round trip. After restore the view model
   reloads all state.
 - File I/O happens on `Dispatchers.IO` in `MainViewModel.exportBackup` / `importBackup`; the UI
@@ -256,14 +261,19 @@ Dashboard (Scaffold)
     │                 quick-action strip, wallets, savings goals, last 5 transactions
     ├── TransactionsTab  search field, month/type pickers, record+totals line, day-grouped rows,
     │                 "Show more" (20 at a time), empty/filtered empty states
-    ├── ReviewTab     month stepper (defaults to current month), income/expense tiles, net,
-    │                 fee calculator, save/update snapshot, saved-months history
+    ├── ReviewTab     month stepper (defaults to current month), live report (income, expense,
+    │                 net, month-end balance, count, average, biggest spending), fee card,
+    │                 auto/manual status, manual edit sheet, saved-months history
     └── SettingsTab   backup & restore, wallets, quick actions, goals, data & reset, about
 ```
 
 - **Destructive actions live in Settings**, not on the dashboard: delete wallets/transactions/
   quick actions/snapshots each open their existing sheet from the "Data & reset" card. The
   dashboard and Activity stay read-mostly.
+- **Snapshots maintain themselves.** `MainViewModel.reload()` calls
+  `Repo.syncAutoSnapshots()`, which is a no-op unless the month key changed. It backfills on first
+  run, then only new months, skipping any month whose row is `manual`. Review's "Switch back to
+  automatic" recomputes one month on demand.
 - **Tab state** is a `Tab` enum looked up by its string key with `rememberSaveable`; no navigation
   library. Switching tabs disposes the previous tab's `remember` state (filters, review month).
 - **Sheet host:** `Dashboard` holds `var sheet: Sheet?`; `Sheet` is a sealed interface in
@@ -319,9 +329,10 @@ at 100.
 
 ### "Change the review month"
 
-`ReviewTab` already steps through every month that has transactions or a snapshot, defaulting to the
-current month. Keep that default; keep the snapshot flow tied to the selected month. Activity's
-filters are independent state — don't merge the two.
+`ReviewTab` steps through every month that has transactions or a snapshot, defaulting to the current
+month. Every figure is derived by `buildMonthReport()`; never store totals except in a snapshot.
+Keep the snapshot flow tied to the selected month. Activity's filters are independent state — don't
+merge the two.
 
 ### What not to add
 
@@ -339,9 +350,18 @@ auto-deduction, or a transfer history table feeding income/expense totals.
 ./gradlew :app:testDebugUnitTest        # JVM: formatting, clipboard blocks, file names (10 tests)
 ./gradlew :app:connectedDebugAndroidTest # DB behavior + backup tests (12 tests)
 
-adb install -r app/build/outputs/apk/release/app-release.apk
+adb install -r app/build/outputs/apk/release/nabungah-release.apk
 adb shell am start -n com.nabungah/.MainActivity
 ```
+
+**Where the APK lands** — the module is `app`, but artifacts are named after the app:
+
+| Build | Output |
+|---|---|
+| Debug | `app/build/outputs/apk/debug/nabungah-debug.apk` |
+| Release | `app/build/outputs/apk/release/nabungah-release.apk` |
+
+`build/` is git-ignored, so APKs are never committed; run the Gradle command again after a clean.
 
 - `local.properties` points at the local SDK (`sdk.dir=…`) and is git-ignored; each machine needs
   its own. Everything else is committed (including the Gradle wrapper).
@@ -405,7 +425,12 @@ that rewrite is explicitly out of scope for this rebuild.
 ## 11. Known limitations / future work
 
 - Backup is whole-app replace-only (no merge, no partial restore) and has no automatic/scheduled
-  export. It covers the five tables, not the device's Android auto-backup.
+  export or file encryption. It covers the five tables, not the device's Android auto-backup.
+- Auto snapshots are maintained at month rollover, not continuously: deleting transactions from an
+  old month won't refresh its `auto` snapshot until the user taps "Refresh automatic report" (or a
+  later sync includes that month). The current month is never auto-saved while it is running.
+- The month-end balance in a report is reconstructed by undoing later transactions; deleting a
+  wallet (which removes balance without leaving a transaction) can skew historical balances.
 - No UI/instrumentation tests for composables — behavior is covered at the `Repo` and formatting
   layers plus manual emulator smoke tests.
 - Cold-start timing from the software-rendered emulator is indicative only; re-measure on a
