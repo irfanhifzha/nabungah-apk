@@ -1,5 +1,11 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
+import java.util.Properties
+
+// Local release signing: CI uses env vars, this machine can use the gitignored properties file.
+val keystoreProperties = rootProject.file("keystore.properties")
+    .takeIf { it.exists() }
+    ?.let { file -> Properties().apply { file.inputStream().use { load(it) } } }
 
 plugins {
     id("com.android.application")
@@ -24,13 +30,21 @@ android {
     // the debug key so `assembleRelease` stays installable.
     signingConfigs {
         val keystorePath = System.getenv("NABUNGAH_KEYSTORE_PATH")
-        val keystoreFile = keystorePath?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile }
+            ?: keystoreProperties?.getProperty("storeFile")
+        val keystoreFile = keystorePath?.takeIf { it.isNotBlank() }?.let { path ->
+            val file = File(path)
+            if (file.isAbsolute) file else rootProject.file(path)
+        }
         if (keystoreFile != null && keystoreFile.exists()) {
             create("release") {
                 storeFile = keystoreFile
                 storePassword = System.getenv("NABUNGAH_KEYSTORE_PASSWORD")
+                    ?: keystoreProperties?.getProperty("storePassword")
                 keyAlias = System.getenv("NABUNGAH_KEY_ALIAS")
-                keyPassword = System.getenv("NABUNGAH_KEY_PASSWORD") ?: storePassword
+                    ?: keystoreProperties?.getProperty("keyAlias")
+                keyPassword = System.getenv("NABUNGAH_KEY_PASSWORD")
+                    ?: keystoreProperties?.getProperty("keyPassword")
+                    ?: storePassword
             }
         }
     }

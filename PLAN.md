@@ -42,7 +42,12 @@ INI RENCANA UNTUK VERSI `1.3`.
   `..._ALIAS`, `..._KEY_PASSWORD`). Keystore asli ada di `nabungah-release.jks` +
   `keystore.properties` (keduanya di-gitignore) — simpan cadangannya, tanpa itu update APK
   tidak bisa ditandatangani dengan identitas yang sama.
+- [ ] add total saldo and wallet info in laporan page.
+- [ ] fix card margin layout "transaksi" cause the Rp.. text part its too close to right edge.
+- [ ] update dompet div, more like square card div.
+- [ ] ...
 - [ ] Push tag `v1.3` saat siap merilis — belum dilakukan, menunggu instruksi.
-- [ ] Tambah `keystore.properties` sebagai fallback signing lokal agar build release di mesin
-  ini tidak bergantung pada env var Gradle daemon.
+- [x] `keystore.properties` dipakai sebagai fallback signing lokal, jadi `assembleRelease` di
+  mesin ini otomatis memakai keystore rilis tanpa env var. Gradle daemon tidak lagi jadi
+  jebakan; build CI tetap memakai env dari secrets.
 - [ ] ..
