@@ -20,7 +20,7 @@ the implementation that satisfies it.
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Version | 1.4.1 (`versionCode` 5), schema v5 |
+| Version | 1.5.0 (`versionCode` 6), schema v5 |
 | Release APK | ~1.5 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
@@ -82,8 +82,9 @@ Package root is `com.nabungah` (application ID `com.nabungah`).
                                    │ synchronous calls on IO dispatcher
 ┌──────────────────────────────────▼───────────────────────────────────────┐
 │ Repo                                                                    │
-│  load(): AppData (wallets, trx, quick actions, goals, snapshots,        │
-│          currentMonth, monthIncome, monthExpense)                        │
+│  load(): bounded AppData (latest 200 trx, wallets, goals, snapshots,     │
+│          counts, activity months, SQL monthIncome/monthExpense)          │
+│  activityPage()/activityMonth()/reviewMonth(): filtered SQL queries      │
 │  mutations: addWallet/addTransaction/delete*/transfer/upsertSnapshot…    │
 │  throws ValidationException(message) for user-facing errors             │
 └──────────────────────────────────┬───────────────────────────────────────┘
@@ -498,6 +499,7 @@ that rewrite is explicitly out of scope for this rebuild.
 
 | Version | Notes |
 |---|---|
+| 1.5.0 (`versionCode` 6) | SQL-backed Activity paging/search, per-month Review queries, bounded in-memory app data, SQL month aggregates, streaming JSON export, Home action spacing. |
 | 1.4.1 (`versionCode` 5) | Copy action moved into each Activity row, quick-action corner "+" removed, system/light/dark theme setting, optional goal descriptions (schema v5), fixed import confirmation, saved fee in backup v6. |
 | 1.4 (`versionCode` 4) | Schema v4 (`starting_balance`, checks), transaction edit/backdate/detail, bulk delete, undo snackbar, wallet filter, backup preview/info, consistency audit, dark theme, adaptive icon, nav rail, Compose UI tests. |
 | 1.3 (`versionCode` 3) | Transfer log, saved global fee, Pengaturan redesign, calendar Activity, report stat dashboard, copy blocks, Windows build guide. |

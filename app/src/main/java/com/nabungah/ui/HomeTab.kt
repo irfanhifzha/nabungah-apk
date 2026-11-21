@@ -57,7 +57,7 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
     ) {
         item { GreetingHeader() }
         item { BalanceHero(data) }
-        if (data.wallets.isEmpty() || data.transactions.isEmpty()) {
+        if (data.wallets.isEmpty() || data.transactionCount == 0) {
             item {
                 OnboardingCard(
                     hasWallet = data.wallets.isNotEmpty(),
@@ -117,7 +117,7 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
                 title = "Aktivitas terakhir",
                 modifier = Modifier.padding(top = 4.dp),
                 actions = {
-                    if (data.transactions.isNotEmpty()) CardAction("Lihat semua", onSeeAll)
+                    if (data.transactionCount > 0) CardAction("Lihat semua", onSeeAll)
                 },
             )
         }
@@ -406,7 +406,10 @@ private fun WalletsSection(data: AppData, onAdd: () -> Unit, onTransfer: () -> U
             title = "Dompet",
             actions = {
                 CardAction("+ Tambah", onAdd)
-                if (data.wallets.size > 1) CardAction("Transfer", onTransfer)
+                if (data.wallets.size > 1) {
+                    Spacer(Modifier.width(8.dp))
+                    CardAction("Transfer", onTransfer)
+                }
             },
         )
         if (data.wallets.isEmpty()) {

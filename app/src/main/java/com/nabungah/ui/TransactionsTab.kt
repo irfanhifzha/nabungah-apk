@@ -33,9 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,27 +47,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nabungah.data.ActivityEntry
+import com.nabungah.data.ActivityPage
+import com.nabungah.data.ActivityQuery
 import com.nabungah.data.AppData
-import com.nabungah.data.TransferLog
-import com.nabungah.data.Trx
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
-
-/** One timeline row: a real transaction or a transfer-log entry (never mixed into reports). */
-private data class ActivityItem(
-    val occurredAt: Long,
-    val month: String,
-    val type: String,
-    val trx: Trx? = null,
-    val transfer: TransferLog? = null,
-) {
-    val key: String
-        get() = when {
-            trx != null -> "trx-${trx.id}"
-            transfer != null -> "transfer-${transfer.id}"
-            else -> "unknown"
-        }
-}
 
 private const val VIEW_LIST = "list"
 private const val VIEW_CALENDAR = "calendar"
@@ -79,66 +66,76 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
     var month by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var walletFilter by rememberSaveable { mutableStateOf<Long?>(null) }
-    var limit by rememberSaveable { mutableIntStateOf(20) }
     var view by rememberSaveable { mutableStateOf(VIEW_LIST) }
     var calendarMonth by rememberSaveable { mutableStateOf(data.currentMonth) }
     var selectedDay by rememberSaveable { mutableStateOf<String?>(null) }
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var confirmBulk by rememberSaveable { mutableStateOf(false) }
+    var page by remember { mutableStateOf(ActivityPage()) }
+    var calendarEntries by remember { mutableStateOf<List<ActivityEntry>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var pageError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
-    val months = remember(data.transactions, data.transfers) {
-        (data.transactions.map { it.month } + data.transfers.map { it.month })
-            .distinct()
-            .sortedDescending()
-    }
+    val months = data.activityMonths
     LaunchedEffect(months) {
         if (month.isNotEmpty() && month !in months) month = ""
     }
-    LaunchedEffect(query, month, type, walletFilter) { limit = 20 }
     LaunchedEffect(calendarMonth) { selectedDay = null }
     LaunchedEffect(selecting) { if (!selecting) selectedIds = emptySet() }
-
-    val allItems = remember(data.transactions, data.transfers) {
-        data.transactions.map {
-            ActivityItem(it.occurredAt, it.month, it.type, trx = it)
-        } + data.transfers.map {
-            ActivityItem(it.occurredAt, it.month, "transfer", transfer = it)
+    LaunchedEffect(vm.dataRevision) {
+        if (selecting) {
+            selecting = false
+            selectedIds = emptySet()
         }
     }
 
-    val activeWallet = walletFilter
-    val matches = remember(allItems, data.walletNames, query, month, type, activeWallet) {
-        val needle = query.trim()
-        allItems
-            .filter { item ->
-                (month.isEmpty() || item.month == month) &&
-                    (type.isEmpty() || item.type == type) &&
-                    (activeWallet == null || item.involves(activeWallet)) &&
-                    (needle.isEmpty() || item.matches(needle, data.walletNames))
-            }
-            .sortedByDescending { it.occurredAt }
-    }
-    val shown = remember(matches, limit) { matches.take(limit) }
-    val income = remember(matches) {
-        matches.sumOf { it.trx?.takeIf { trx -> trx.type == "income" }?.amount ?: 0L }
-    }
-    val expense = remember(matches) {
-        matches.sumOf { it.trx?.takeIf { trx -> trx.type == "expense" }?.amount ?: 0L }
-    }
-
-    val calendarItems = remember(allItems, data.walletNames, calendarMonth, query, type, activeWallet) {
-        val needle = query.trim()
-        allItems.filter { item ->
-            item.month == calendarMonth &&
-                (type.isEmpty() || item.type == type) &&
-                (activeWallet == null || item.involves(activeWallet)) &&
-                (needle.isEmpty() || item.matches(needle, data.walletNames))
+    LaunchedEffect(query, month, type, walletFilter, vm.dataRevision) {
+        loading = true
+        pageError = null
+        if (query.isNotBlank()) delay(250)
+        try {
+            page = vm.activityPage(
+                ActivityQuery(
+                    query = query.trim(),
+                    month = month,
+                    type = type,
+                    walletId = walletFilter,
+                    limit = 20,
+                    offset = 0,
+                ),
+            )
+        } catch (e: Exception) {
+            pageError = e.message ?: "Aktivitas gagal dimuat"
+            page = ActivityPage()
+        } finally {
+            loading = false
         }
     }
-    val selectedItems = remember(calendarItems, selectedDay) {
+
+    LaunchedEffect(view, calendarMonth, query, type, walletFilter, vm.dataRevision) {
+        if (view != VIEW_CALENDAR) {
+            calendarEntries = emptyList()
+            return@LaunchedEffect
+        }
+        if (query.isNotBlank()) delay(250)
+        calendarEntries = runCatching {
+            vm.activityMonth(
+                ActivityQuery(
+                    query = query.trim(),
+                    month = calendarMonth,
+                    type = type,
+                    walletId = walletFilter,
+                ),
+            ).items
+        }.getOrDefault(emptyList())
+    }
+
+    val selectedItems = remember(calendarEntries, selectedDay) {
         val day = selectedDay ?: return@remember emptyList()
-        calendarItems
+        calendarEntries
             .filter { Fmt.dayKey(it.occurredAt) == day }
             .sortedByDescending { it.occurredAt }
     }
@@ -245,7 +242,7 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
             item {
                 ActivityCalendar(
                     month = calendarMonth,
-                    items = calendarItems,
+                    items = calendarEntries,
                     selectedDay = selectedDay,
                     onMonthChange = { calendarMonth = it },
                     onDaySelect = { selectedDay = if (selectedDay == it) null else it },
@@ -345,20 +342,20 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "${matches.size} aktivitas",
+                        text = "${page.total} aktivitas",
                         style = MaterialTheme.typography.labelMedium,
                         color = Muted,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        text = "+ ${Fmt.rp(income)}",
+                        text = "+ ${Fmt.rp(page.income)}",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = IncomeGreen,
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "- ${Fmt.rp(expense)}",
+                        text = "- ${Fmt.rp(page.expense)}",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = ExpenseRed,
@@ -379,9 +376,28 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
                 }
             }
 
-            if (matches.isEmpty()) {
+            if (pageError != null) {
                 item {
-                    if (data.transactions.isEmpty() && data.transfers.isEmpty()) {
+                    Text(
+                        text = pageError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
+            if (loading && page.items.isEmpty()) {
+                item {
+                    Text(
+                        text = "Memuat aktivitas…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            } else if (page.items.isEmpty()) {
+                item {
+                    if (data.transactionCount == 0 && data.transferCount == 0) {
                         EmptyState(
                             title = "Belum ada aktivitas",
                             body = "Catat pemasukan atau pengeluaran pertamamu.",
@@ -403,7 +419,7 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
                     }
                 }
             } else {
-                val groups = shown.groupBy { Fmt.dayKey(it.occurredAt) }
+                val groups = page.items.groupBy { Fmt.dayKey(it.occurredAt) }
                 groups.forEach { (day, dayItems) ->
                     item(key = "day-$day") {
                         Text(
@@ -437,13 +453,45 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
                     }
                 }
 
-                if (shown.size < matches.size) {
+                if (page.items.size < page.total) {
                     item {
                         OutlinedButton(
-                            onClick = { limit += 20 },
+                            onClick = {
+                                if (!loadingMore) {
+                                    scope.launch {
+                                        loadingMore = true
+                                        try {
+                                            val next = vm.activityPage(
+                                                ActivityQuery(
+                                                    query = query.trim(),
+                                                    month = month,
+                                                    type = type,
+                                                    walletId = walletFilter,
+                                                    limit = 20,
+                                                    offset = page.items.size,
+                                                ),
+                                            )
+                                            page = page.copy(
+                                                items = page.items + next.items,
+                                                total = next.total,
+                                                income = next.income,
+                                                expense = next.expense,
+                                            )
+                                        } catch (e: Exception) {
+                                            pageError = e.message ?: "Aktivitas gagal dimuat"
+                                        } finally {
+                                            loadingMore = false
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !loadingMore,
                             modifier = Modifier.fillMaxWidth().height(46.dp),
                         ) {
-                            Text("Tampilkan ${minOf(20, matches.size - shown.size)} lagi")
+                            Text(
+                                if (loadingMore) "Memuat…"
+                                else "Tampilkan ${minOf(20, page.total - page.items.size)} lagi",
+                            )
                         }
                     }
                 }
@@ -470,7 +518,7 @@ fun TransactionsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) 
 
 @Composable
 private fun ActivityRow(
-    item: ActivityItem,
+    item: ActivityEntry,
     data: AppData,
     selecting: Boolean = false,
     selected: Boolean = false,
@@ -502,7 +550,7 @@ private fun String.label(): String = when (this) {
 @Composable
 private fun ActivityCalendar(
     month: String,
-    items: List<ActivityItem>,
+    items: List<ActivityEntry>,
     selectedDay: String?,
     onMonthChange: (String) -> Unit,
     onDaySelect: (String) -> Unit,
@@ -667,25 +715,4 @@ private fun shiftMonth(month: String, offset: Int): String {
         add(Calendar.MONTH, offset)
     }
     return Fmt.monthKey(cal.timeInMillis)
-}
-
-private fun ActivityItem.involves(walletId: Long): Boolean {
-    trx?.let { return it.walletId == walletId }
-    transfer?.let { return it.fromWalletId == walletId || it.toWalletId == walletId }
-    return false
-}
-
-private fun ActivityItem.matches(needle: String, walletNames: Map<Long, String>): Boolean {
-    val trx = trx
-    if (trx != null) {
-        return trx.title.contains(needle, ignoreCase = true) ||
-            trx.note.contains(needle, ignoreCase = true) ||
-            (walletNames[trx.walletId] ?: "").contains(needle, ignoreCase = true)
-    }
-    val transfer = transfer ?: return false
-    val from = walletNames[transfer.fromWalletId] ?: "Dompet dihapus"
-    val to = walletNames[transfer.toWalletId] ?: "Dompet dihapus"
-    return "transfer".contains(needle, ignoreCase = true) ||
-        from.contains(needle, ignoreCase = true) ||
-        to.contains(needle, ignoreCase = true)
 }

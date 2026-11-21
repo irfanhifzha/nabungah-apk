@@ -245,6 +245,7 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
                 is Sheet.DeleteTransactions -> DeleteTransactionsSheet(
                     vm = vm,
                     transactions = data.transactions,
+                    totalCount = data.transactionCount,
                     walletNames = data.walletNames,
                     onClose = { sheet = null },
                 )

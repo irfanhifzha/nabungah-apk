@@ -66,16 +66,20 @@ data class Snapshot(
 
 data class AppData(
     val wallets: List<Wallet> = emptyList(),
+    /** Latest 200 rows only; Activity queries the full history from SQLite. */
     val transactions: List<Trx> = emptyList(),
     val quickActions: List<QuickAction> = emptyList(),
     val goals: List<Goal> = emptyList(),
     val snapshots: List<Snapshot> = emptyList(),
-    val transfers: List<TransferLog> = emptyList(),
     /** Saved fee percentage used for live previews; snapshots keep their own copy. */
     val feePercent: Double = 2.5,
     val currentMonth: String = "",
     val monthIncome: Long = 0,
     val monthExpense: Long = 0,
+    val transactionCount: Int = 0,
+    val transferCount: Int = 0,
+    val transactionMonths: List<String> = emptyList(),
+    val activityMonths: List<String> = emptyList(),
     val lastBackupAt: Long = 0,
     val lastBackupBytes: Long = 0,
 ) {
@@ -83,6 +87,46 @@ data class AppData(
     val totalBalance: Long = wallets.sumOf { it.balance }
     val walletNames: Map<Long, String> = wallets.associate { it.id to it.name }
 }
+
+/** One combined Activity timeline row; transfers are never income or expense. */
+data class ActivityEntry(
+    val occurredAt: Long,
+    val month: String,
+    val type: String,
+    val trx: Trx? = null,
+    val transfer: TransferLog? = null,
+) {
+    val key: String
+        get() = when {
+            trx != null -> "trx-${trx.id}"
+            transfer != null -> "transfer-${transfer.id}"
+            else -> "unknown"
+        }
+}
+
+/** SQL-side filters for the Activity timeline. */
+data class ActivityQuery(
+    val query: String = "",
+    val month: String = "",
+    val type: String = "",
+    val walletId: Long? = null,
+    val limit: Int = 20,
+    val offset: Int = 0,
+)
+
+data class ActivityPage(
+    val items: List<ActivityEntry> = emptyList(),
+    val total: Int = 0,
+    val income: Long = 0,
+    val expense: Long = 0,
+)
+
+/** Transactions for one Review month plus the net of later months for closing balance. */
+data class ReviewMonthData(
+    val month: String = "",
+    val transactions: List<Trx> = emptyList(),
+    val netAfter: Long = 0,
+)
 
 data class BackupPreview(
     val version: Int,

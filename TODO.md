@@ -1,7 +1,7 @@
 # TODO — Nabungah
 
 Ide perbaikan, diurutkan dari yang paling dekat sampai jangka panjang.
-Terakhir diperbarui: 21 November 2026 · versi 1.4.1 (`versionCode` 5).
+Terakhir diperbarui: 21 November 2026 · versi 1.5.0 (`versionCode` 6).
 
 **Cara pakai**
 
@@ -28,6 +28,15 @@ Terakhir diperbarui: 21 November 2026 · versi 1.4.1 (`versionCode` 5).
 - [x] **Snapshot otomatis** saat bulan berganti; `manual` tidak pernah ditimpa, bisa dikembalikan
   ke otomatis. Database naik ke skema v2 (`source`), backup v2 (v1 masih bisa diimpor).
 - [x] Error state + "Try again" saat database gagal dibuka.
+
+## Selesai di 1.5.0
+
+- [x] Tombol **"+ Tambah"** dan **"Transfer"** di header Dompet Home kini punya jarak 8dp.
+- [x] **Skalabilitas**: `AppData` hanya menyimpan 200 transaksi terakhir; Aktivitas memakai
+  paging + pencarian/filter SQL, Laporan query per bulan, dan total bulanan dihitung SQL.
+- [x] Export backup memakai `JsonWriter` streaming; salinan JSON penuh tidak lagi dibangun di
+  memori.
+- [x] Versi naik ke **1.5.0** (`versionCode` 6).
 
 ## Selesai di 1.4.1
 

@@ -401,6 +401,7 @@ Notes:
 - **Light.** Idle memory footprint small; lists must be lazy (recycled/`LazyColumn`), not built all at once. The "limit 10/20/50/100" selector exists precisely because the list is not meant to render everything.
 - **Compact code.** One screen, five entities, no frameworks beyond what the platform needs. Do not introduce DI graphs, navigation libraries, or ORMs that dominate the binary for six tables.
 - **Data safety.** All balance-mutating operations are transactional; a failed write must leave consistent state. Provide a simple local backup story (e.g. export/import a single DB or JSON file) only if it does not bloat the app; the original had none.
+- **Scalability.** Keep only a bounded recent transaction list in memory (`AppData`), page/filter Activity in SQL, query Review one month at a time, and stream JSON exports. Do not reintroduce a full-table `load()` for UI state.
 - **Battery/CPU:** no polling, no timers. Recompute derived totals on data change only.
 
 ---

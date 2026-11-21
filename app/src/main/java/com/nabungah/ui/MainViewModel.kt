@@ -3,18 +3,24 @@ package com.nabungah.ui
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nabungah.data.ActivityPage
+import com.nabungah.data.ActivityQuery
 import com.nabungah.data.AppData
 import com.nabungah.data.BackupPreview
 import com.nabungah.data.ConsistencyReport
 import com.nabungah.data.Repo
+import com.nabungah.data.ReviewMonthData
 import com.nabungah.data.Trx
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.FilterOutputStream
+import java.io.OutputStreamWriter
 
 /** One-shot confirmation shown by the app shell; undo is only set for single deletes. */
 data class UiEvent(
@@ -32,6 +38,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var loaded by mutableStateOf(false)
+        private set
+
+    /** Increments after every successful reload so query-backed tabs refetch. */
+    var dataRevision by mutableIntStateOf(0)
         private set
 
     var loadError by mutableStateOf<String?>(null)
@@ -56,6 +66,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         event = UiEvent(++nextEventId, message, undoTransaction)
     }
 
+    private fun applyData(fresh: AppData) {
+        data = fresh
+        dataRevision++
+    }
+
     init {
         reload()
     }
@@ -64,11 +79,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             loadError = null
             try {
-                data = withContext(Dispatchers.IO) {
+                val fresh = withContext(Dispatchers.IO) {
                     // Cheap no-op unless the calendar month changed since the last run.
                     repo.syncAutoSnapshots()
                     repo.load()
                 }
+                applyData(fresh)
                 loaded = true
             } catch (e: Exception) {
                 loadError = e.message ?: "Database lokal tidak bisa dibuka"
@@ -92,7 +108,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     block(repo)
                     repo.load()
-                }.let { fresh -> data = fresh }
+                }.let { fresh -> applyData(fresh) }
                 if (successMessage != null) post(successMessage)
                 onDone()
             } catch (e: Exception) {
@@ -100,6 +116,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    suspend fun activityPage(query: ActivityQuery): ActivityPage =
+        withContext(Dispatchers.IO) { repo.activityPage(query) }
+
+    suspend fun activityMonth(query: ActivityQuery): ActivityPage =
+        withContext(Dispatchers.IO) { repo.activityMonth(query) }
+
+    suspend fun reviewMonth(month: String): ReviewMonthData =
+        withContext(Dispatchers.IO) { repo.reviewMonth(month) }
 
     /** Re-reads the clock only when the calendar month actually rolled over. */
     fun checkMonthRollover() {
@@ -155,7 +180,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val deleted = withContext(Dispatchers.IO) {
                     repo.deleteTransaction(id)
                 }
-                data = withContext(Dispatchers.IO) { repo.load() }
+                applyData(withContext(Dispatchers.IO) { repo.load() })
                 if (deleted != null) post("Transaksi dihapus", deleted)
             } catch (e: Exception) {
                 post(e.message ?: "Gagal menghapus transaksi")
@@ -259,15 +284,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val resolver = getApplication<Application>().contentResolver
                 val bytes = withContext(Dispatchers.IO) {
-                    val json = repo.exportJson()
-                    val dataBytes = json.toByteArray(Charsets.UTF_8)
-                    resolver.openOutputStream(uri)?.use { out ->
-                        out.write(dataBytes)
-                    } ?: throw IllegalStateException("File backup tidak bisa ditulis")
-                    repo.markBackupExported(dataBytes.size.toLong())
-                    dataBytes.size.toLong()
+                    var written = 0L
+                    val counting = object : FilterOutputStream(
+                        resolver.openOutputStream(uri)
+                            ?: throw IllegalStateException("File backup tidak bisa ditulis"),
+                    ) {
+                        override fun write(b: Int) {
+                            out.write(b)
+                            written++
+                        }
+
+                        override fun write(b: ByteArray, off: Int, len: Int) {
+                            out.write(b, off, len)
+                            written += len
+                        }
+                    }
+                    counting.buffered().use { out ->
+                        val writer = OutputStreamWriter(out, Charsets.UTF_8)
+                        repo.exportTo(writer)
+                        writer.flush()
+                    }
+                    repo.markBackupExported(written)
+                    written
                 }
-                data = withContext(Dispatchers.IO) { repo.load() }
+                applyData(withContext(Dispatchers.IO) { repo.load() })
                 post("Backup tersimpan (${bytes / 1024} KB)")
                 onDone()
             } catch (e: Exception) {
@@ -301,10 +341,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                         ?: throw IllegalStateException("File backup tidak bisa dibaca")
                 }
-                data = withContext(Dispatchers.IO) {
+                applyData(withContext(Dispatchers.IO) {
                     repo.importJson(text)
                     repo.load()
-                }
+                })
                 post("Backup dipulihkan")
                 onDone()
             } catch (e: Exception) {

@@ -816,6 +816,7 @@ fun DeleteWalletsSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> 
 fun DeleteTransactionsSheet(
     vm: MainViewModel,
     transactions: List<Trx>,
+    totalCount: Int,
     walletNames: Map<Long, String>,
     onClose: () -> Unit,
 ) {
@@ -826,6 +827,12 @@ fun DeleteTransactionsSheet(
     SheetColumn {
         SheetTitle("Hapus Transaksi")
         SheetNote("Menghapus transaksi membalik efeknya pada dompet, jadi saldo tetap konsisten.")
+        if (totalCount > transactions.size) {
+            SheetNote(
+                "Menampilkan ${transactions.size} transaksi terbaru dari $totalCount. " +
+                    "Gunakan tab Aktivitas untuk mencari transaksi lama.",
+            )
+        }
         if (transactions.isEmpty()) EmptyText("Belum ada transaksi")
         transactions.forEach { t ->
             SelectableRow(
@@ -996,8 +1003,8 @@ fun DeleteAllDataSheet(vm: MainViewModel, data: AppData, onClose: () -> Unit) {
             color = MaterialTheme.colorScheme.error,
         )
         SheetNote(
-            "${data.wallets.size} dompet · ${data.transactions.size} transaksi · " +
-                "${data.transfers.size} transfer · ${data.goals.size} target · " +
+            "${data.wallets.size} dompet · ${data.transactionCount} transaksi · " +
+                "${data.transferCount} transfer · ${data.goals.size} target · " +
                 "${data.quickActions.size} aksi cepat · ${data.snapshots.size} snapshot",
         )
         LabeledTextField(

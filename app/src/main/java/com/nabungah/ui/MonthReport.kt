@@ -39,6 +39,8 @@ fun buildMonthReport(
     transactions: List<Trx>,
     totalBalance: Long,
     feePercent: Double,
+    /** Net of all transactions after [month], when the caller queried only that month. */
+    netAfterOverride: Long? = null,
 ): MonthReport {
     var income = 0L
     var expense = 0L
@@ -63,7 +65,7 @@ fun buildMonthReport(
         income = income,
         expense = expense,
         count = count,
-        balance = totalBalance - netAfter,
+        balance = totalBalance - (netAfterOverride ?: netAfter),
         feePercent = feePercent,
         feeExpense = Fmt.feeExpense(income, feePercent),
         topExpenses = expenseByTitle

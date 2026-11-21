@@ -105,3 +105,18 @@ INI RENCANA UNTUK VERSI `1.3`.
   `assembleRelease` sukses. APK rilis 1.549.702 byte, `versionCode` 5 / `1.4.1`, bertanda tangan
   `CN=Nabungah`.
 - [x] Tag `v1.4.1` dihapus lalu dibuat ulang di commit final.
+
+## Batch 1.5.0
+
+- [x] Jarak 8dp antara tombol **"+ Tambah"** dan **"Transfer"** di header Dompet Home.
+- [x] **Skalabilitas**: `AppData` dibatasi ke 200 transaksi terbaru; Aktivitas memakai paging,
+  pencarian, filter, dan agregat SQL; Laporan query transaksi + net bulan berikutnya per bulan;
+  total bulanan Home dihitung SQL.
+- [x] Export backup streaming dengan `JsonWriter` (tanpa string JSON penuh di memori). Import
+  masih memakai dokumen JSON utuh untuk validasi atomik.
+- [x] Query SQL paging/filter diverifikasi dengan SQLite host (tanpa emulator/perangkat).
+- [x] Versi **1.5.0** (`versionCode` 6).
+- [x] Build 1.5.0: 14 unit test lulus, compile androidTest sukses, `assembleDebug` dan
+  `assembleRelease` sukses. APK rilis 1.549.702 byte, `versionCode` 6, bertanda tangan
+  `CN=Nabungah`.
+- [x] Tag rilis **v1.5.0**.

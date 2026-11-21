@@ -3,6 +3,7 @@ package com.nabungah
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.nabungah.data.ActivityQuery
 import com.nabungah.data.Repo
 import com.nabungah.data.Snapshot
 import com.nabungah.data.ValidationException
@@ -460,6 +461,33 @@ class RepoTest {
             assertEquals(1, repo.load().wallets.size)
             assertEquals(5_000L, repo.load().wallets.single().balance)
         }
+    }
+
+    @Test
+    fun activityPagingAndReviewMonthUseQueryData() {
+        val now = System.currentTimeMillis()
+        repo.addWallet("Cash", 1_000_000)
+        val cash = walletId("Cash")
+        repo.addTransaction("Kopi", 20_000, "expense", cash, "pagi", now)
+        repo.addTransaction("Gaji", 100_000, "income", cash, "", now - 1_000)
+
+        val first = repo.activityPage(ActivityQuery(limit = 1))
+        assertEquals(1, first.items.size)
+        assertEquals(2, first.total)
+        assertEquals(100_000L, first.income)
+        assertEquals(20_000L, first.expense)
+
+        val search = repo.activityPage(ActivityQuery(query = "Kopi"))
+        assertEquals(1, search.total)
+        assertEquals("Kopi", search.items.single().trx?.title)
+
+        val old = java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.MONTH, -1)
+        }.timeInMillis
+        repo.addTransaction("Lama", 10_000, "expense", cash, "", old)
+        val review = repo.reviewMonth(FmtForTest.month(old))
+        assertEquals(1, review.transactions.size)
+        assertEquals(80_000L, review.netAfter)
     }
 }
 

@@ -4,10 +4,13 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteConstraintException
+import android.util.JsonWriter
 import android.database.sqlite.SQLiteDatabase
 import com.nabungah.ui.Fmt
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.StringWriter
+import java.io.Writer
 import kotlin.math.max
 
 /** Thrown for user-facing validation failures. */
@@ -41,8 +44,9 @@ class Repo(context: Context) {
             }
         }
 
+        // Keep the in-memory snapshot bounded. Activity pages the full history from SQLite.
         val transactions = db.query(
-            "trx", null, null, null, null, null, "occurred_at DESC, id DESC"
+            "trx", null, null, null, null, null, "occurred_at DESC, id DESC", "200"
         ).use { c ->
             buildList {
                 while (c.moveToNext()) {
@@ -54,25 +58,6 @@ class Repo(context: Context) {
                             type = c.getString(c.getColumnIndexOrThrow("type")),
                             walletId = c.getLongOrNull("wallet_id"),
                             note = c.getString(c.getColumnIndexOrThrow("note")),
-                            occurredAt = c.getLong(c.getColumnIndexOrThrow("occurred_at")),
-                            month = c.getString(c.getColumnIndexOrThrow("month")),
-                        )
-                    )
-                }
-            }
-        }
-
-        val transfers = db.query(
-            "transfer_log", null, null, null, null, null, "occurred_at DESC, id DESC"
-        ).use { c ->
-            buildList {
-                while (c.moveToNext()) {
-                    add(
-                        TransferLog(
-                            id = c.getLong(c.getColumnIndexOrThrow("id")),
-                            amount = c.getLong(c.getColumnIndexOrThrow("amount")),
-                            fromWalletId = c.getLongOrNull("from_wallet_id"),
-                            toWalletId = c.getLongOrNull("to_wallet_id"),
                             occurredAt = c.getLong(c.getColumnIndexOrThrow("occurred_at")),
                             month = c.getString(c.getColumnIndexOrThrow("month")),
                         )
@@ -139,6 +124,16 @@ class Repo(context: Context) {
         }
 
         val month = Fmt.monthKey(System.currentTimeMillis())
+        val (income, expense) = db.rawQuery(
+            """
+            SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
+            FROM trx WHERE month = ?
+            """.trimIndent(),
+            arrayOf(month),
+        ).use { c ->
+            if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else 0L to 0L
+        }
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return AppData(
             wallets = wallets,
@@ -146,20 +141,179 @@ class Repo(context: Context) {
             quickActions = quickActions,
             goals = goals,
             snapshots = snapshots,
-            transfers = transfers,
             feePercent = feePercent(),
             currentMonth = month,
-            // Reuse the rows already loaded instead of running two extra aggregate queries.
-            monthIncome = transactions.sumOf {
-                if (it.month == month && it.type == "income") it.amount else 0L
-            },
-            monthExpense = transactions.sumOf {
-                if (it.month == month && it.type == "expense") it.amount else 0L
-            },
+            monthIncome = income,
+            monthExpense = expense,
+            transactionCount = countRows("trx"),
+            transferCount = countRows("transfer_log"),
+            transactionMonths = distinctMonths("trx"),
+            activityMonths = (distinctMonths("trx") + distinctMonths("transfer_log"))
+                .distinct()
+                .sortedDescending(),
             lastBackupAt = prefs.getLong(KEY_LAST_EXPORT_AT, 0),
             lastBackupBytes = prefs.getLong(KEY_LAST_EXPORT_BYTES, 0),
         )
     }
+
+    // --------------------------------------------------------- activity paging
+
+    /** Pages the combined transaction/transfer timeline with filters applied in SQLite. */
+    fun activityPage(query: ActivityQuery): ActivityPage {
+        val (where, args) = activityWhere(query)
+        val limit = query.limit.coerceIn(1, 200)
+        val offset = query.offset.coerceAtLeast(0)
+        val aggregate = activityAggregate(where, args)
+        val items = db.rawQuery(
+            "SELECT * $ACTIVITY_SOURCE\n$where ORDER BY occurred_at DESC, id DESC, kind " +
+                "LIMIT ? OFFSET ?",
+            args + limit.toString() + offset.toString(),
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(c.toActivityEntry())
+            }
+        }
+        return ActivityPage(items, aggregate.first, aggregate.second, aggregate.third)
+    }
+
+    /** A whole calendar month; bounded by one month rather than all history. */
+    fun activityMonth(query: ActivityQuery): ActivityPage {
+        val (where, args) = activityWhere(query)
+        val aggregate = activityAggregate(where, args)
+        val items = db.rawQuery(
+            "SELECT * $ACTIVITY_SOURCE\n$where ORDER BY occurred_at DESC, id DESC, kind",
+            args,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(c.toActivityEntry())
+            }
+        }
+        return ActivityPage(items, aggregate.first, aggregate.second, aggregate.third)
+    }
+
+    /** One Review month plus later-month net, so historical closing balances stay exact. */
+    fun reviewMonth(month: String): ReviewMonthData {
+        val transactions = db.query(
+            "trx", null, "month = ?", arrayOf(month), null, null, "occurred_at DESC, id DESC"
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        Trx(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            title = c.getString(c.getColumnIndexOrThrow("title")),
+                            amount = c.getLong(c.getColumnIndexOrThrow("amount")),
+                            type = c.getString(c.getColumnIndexOrThrow("type")),
+                            walletId = c.getLongOrNull("wallet_id"),
+                            note = c.getString(c.getColumnIndexOrThrow("note")),
+                            occurredAt = c.getLong(c.getColumnIndexOrThrow("occurred_at")),
+                            month = c.getString(c.getColumnIndexOrThrow("month")),
+                        )
+                    )
+                }
+            }
+        }
+        val netAfter = db.rawQuery(
+            """
+            SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0)
+            FROM trx WHERE month > ?
+            """.trimIndent(),
+            arrayOf(month),
+        ).use { c -> if (c.moveToFirst()) c.getLong(0) else 0L }
+        return ReviewMonthData(month, transactions, netAfter)
+    }
+
+    private fun activityAggregate(
+        where: String,
+        args: Array<String>,
+    ): Triple<Int, Long, Long> = db.rawQuery(
+        """
+        SELECT COUNT(*),
+               COALESCE(SUM(CASE WHEN kind = 'trx' AND type = 'income' THEN amount ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN kind = 'trx' AND type = 'expense' THEN amount ELSE 0 END), 0)
+        $ACTIVITY_SOURCE
+        $where
+        """.trimIndent(),
+        args,
+    ).use { c ->
+        if (c.moveToFirst()) Triple(c.getInt(0), c.getLong(1), c.getLong(2))
+        else Triple(0, 0L, 0L)
+    }
+
+    private fun activityWhere(query: ActivityQuery): Pair<String, Array<String>> {
+        val clauses = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        if (query.month.isNotEmpty()) {
+            clauses += "month = ?"
+            args += query.month
+        }
+        when (query.type) {
+            "income", "expense" -> {
+                clauses += "type = ?"
+                args += query.type
+            }
+            "transfer" -> clauses += "kind = 'transfer'"
+        }
+        if (query.query.isNotBlank()) {
+            val like = "%${query.query.trim()}%"
+            clauses += "(title LIKE ? OR note LIKE ? OR wallet_name LIKE ? OR " +
+                "from_name LIKE ? OR to_name LIKE ?)"
+            repeat(5) { args += like }
+        }
+        query.walletId?.let { walletId ->
+            clauses += "((kind = 'trx' AND wallet_id = ?) OR " +
+                "(kind = 'transfer' AND (from_wallet_id = ? OR to_wallet_id = ?)))"
+            repeat(3) { args += walletId.toString() }
+        }
+        return if (clauses.isEmpty()) "" to emptyArray()
+        else "WHERE ${clauses.joinToString(" AND ")}" to args.toTypedArray()
+    }
+
+    private fun Cursor.toActivityEntry(): ActivityEntry {
+        val kind = getString(getColumnIndexOrThrow("kind"))
+        val occurredAt = getLong(getColumnIndexOrThrow("occurred_at"))
+        val month = getString(getColumnIndexOrThrow("month"))
+        return if (kind == "trx") {
+            ActivityEntry(
+                occurredAt = occurredAt,
+                month = month,
+                type = getString(getColumnIndexOrThrow("type")),
+                trx = Trx(
+                    id = getLong(getColumnIndexOrThrow("id")),
+                    title = getString(getColumnIndexOrThrow("title")),
+                    amount = getLong(getColumnIndexOrThrow("amount")),
+                    type = getString(getColumnIndexOrThrow("type")),
+                    walletId = getLongOrNull("wallet_id"),
+                    note = getString(getColumnIndexOrThrow("note")),
+                    occurredAt = occurredAt,
+                    month = month,
+                ),
+            )
+        } else {
+            ActivityEntry(
+                occurredAt = occurredAt,
+                month = month,
+                type = "transfer",
+                transfer = TransferLog(
+                    id = getLong(getColumnIndexOrThrow("id")),
+                    amount = getLong(getColumnIndexOrThrow("amount")),
+                    fromWalletId = getLongOrNull("from_wallet_id"),
+                    toWalletId = getLongOrNull("to_wallet_id"),
+                    occurredAt = occurredAt,
+                    month = month,
+                ),
+            )
+        }
+    }
+
+    private fun countRows(table: String): Int =
+        db.rawQuery("SELECT COUNT(*) FROM $table", null)
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    private fun distinctMonths(table: String): List<String> =
+        db.rawQuery("SELECT DISTINCT month FROM $table ORDER BY month DESC", null).use { c ->
+            buildList { while (c.moveToNext()) add(c.getString(0)) }
+        }
 
     private fun Cursor.getLongOrNull(column: String): Long? {
         val idx = getColumnIndexOrThrow(column)
@@ -722,119 +876,124 @@ class Repo(context: Context) {
 
     /** Serializes every table and the saved fee to one JSON document (schema version 6). */
     fun exportJson(): String {
-        val root = JSONObject()
-        root.put("app", BACKUP_APP)
-        root.put("version", BACKUP_VERSION)
-        root.put("exportedAt", System.currentTimeMillis())
-        root.put("feePercent", feePercent())
+        val out = StringWriter()
+        exportTo(out)
+        return out.toString()
+    }
 
-        val wallets = JSONArray()
+    /** Streams the same document directly to a file, avoiding a full JSON copy in memory. */
+    fun exportTo(out: Writer) {
+        val json = JsonWriter(out)
+        json.beginObject()
+        json.name("app").value(BACKUP_APP)
+        json.name("version").value(BACKUP_VERSION.toLong())
+        json.name("exportedAt").value(System.currentTimeMillis())
+        json.name("feePercent").value(feePercent())
+
+        json.name("wallets").beginArray()
         db.query("wallet", null, null, null, null, null, "id ASC").use { c ->
             while (c.moveToNext()) {
-                wallets.put(
-                    JSONObject()
-                        .put("id", c.longOf("id"))
-                        .put("name", c.stringOf("name"))
-                        .put("balance", c.longOf("balance"))
-                        .put("starting_balance", c.longOf("starting_balance"))
-                        .put("created_at", c.longOf("created_at"))
-                        .put("updated_at", c.longOf("updated_at")),
-                )
+                json.beginObject()
+                json.name("id").value(c.longOf("id"))
+                json.name("name").value(c.stringOf("name"))
+                json.name("balance").value(c.longOf("balance"))
+                json.name("starting_balance").value(c.longOf("starting_balance"))
+                json.name("created_at").value(c.longOf("created_at"))
+                json.name("updated_at").value(c.longOf("updated_at"))
+                json.endObject()
             }
         }
-        root.put("wallets", wallets)
+        json.endArray()
 
-        val transactions = JSONArray()
+        json.name("transactions").beginArray()
         db.query("trx", null, null, null, null, null, "id ASC").use { c ->
             while (c.moveToNext()) {
-                val item = JSONObject()
-                    .put("id", c.longOf("id"))
-                    .put("title", c.stringOf("title"))
-                    .put("amount", c.longOf("amount"))
-                    .put("type", c.stringOf("type"))
-                    .put("note", c.stringOf("note"))
-                    .put("occurred_at", c.longOf("occurred_at"))
-                    .put("month", c.stringOf("month"))
+                json.beginObject()
+                json.name("id").value(c.longOf("id"))
+                json.name("title").value(c.stringOf("title"))
+                json.name("amount").value(c.longOf("amount"))
+                json.name("type").value(c.stringOf("type"))
+                json.name("note").value(c.stringOf("note"))
+                json.name("occurred_at").value(c.longOf("occurred_at"))
+                json.name("month").value(c.stringOf("month"))
+                json.name("wallet_id")
                 val walletIdx = c.getColumnIndexOrThrow("wallet_id")
-                item.put(
-                    "wallet_id",
-                    if (c.isNull(walletIdx)) JSONObject.NULL else c.getLong(walletIdx),
-                )
-                transactions.put(item)
+                if (c.isNull(walletIdx)) json.nullValue() else json.value(c.getLong(walletIdx))
+                json.endObject()
             }
         }
-        root.put("transactions", transactions)
+        json.endArray()
 
-        val quickActions = JSONArray()
+        json.name("quickActions").beginArray()
         db.query("quick_action", null, null, null, null, null, "id ASC").use { c ->
             while (c.moveToNext()) {
-                quickActions.put(
-                    JSONObject()
-                        .put("id", c.longOf("id"))
-                        .put("title", c.stringOf("title"))
-                        .put("amount", c.longOf("amount"))
-                        .put("type", c.stringOf("type"))
-                        .put("created_at", c.longOf("created_at"))
-                        .put("updated_at", c.longOf("updated_at")),
-                )
+                json.beginObject()
+                json.name("id").value(c.longOf("id"))
+                json.name("title").value(c.stringOf("title"))
+                json.name("amount").value(c.longOf("amount"))
+                json.name("type").value(c.stringOf("type"))
+                json.name("created_at").value(c.longOf("created_at"))
+                json.name("updated_at").value(c.longOf("updated_at"))
+                json.endObject()
             }
         }
-        root.put("quickActions", quickActions)
+        json.endArray()
 
-        val goals = JSONArray()
+        json.name("goals").beginArray()
         db.query("goal", null, null, null, null, null, "id ASC").use { c ->
             while (c.moveToNext()) {
-                goals.put(
-                    JSONObject()
-                        .put("id", c.longOf("id"))
-                        .put("title", c.stringOf("title"))
-                        .put("description", c.stringOf("description"))
-                        .put("target_amount", c.longOf("target_amount"))
-                        .put("saved_amount", c.longOf("saved_amount"))
-                        .put("status", c.stringOf("status"))
-                        .put("created_at", c.longOf("created_at"))
-                        .put("updated_at", c.longOf("updated_at")),
-                )
+                json.beginObject()
+                json.name("id").value(c.longOf("id"))
+                json.name("title").value(c.stringOf("title"))
+                json.name("description").value(c.stringOf("description"))
+                json.name("target_amount").value(c.longOf("target_amount"))
+                json.name("saved_amount").value(c.longOf("saved_amount"))
+                json.name("status").value(c.stringOf("status"))
+                json.name("created_at").value(c.longOf("created_at"))
+                json.name("updated_at").value(c.longOf("updated_at"))
+                json.endObject()
             }
         }
-        root.put("goals", goals)
+        json.endArray()
 
-        val snapshots = JSONArray()
+        json.name("snapshots").beginArray()
         db.query("month_snapshot", null, null, null, null, null, "month ASC").use { c ->
             while (c.moveToNext()) {
-                snapshots.put(
-                    JSONObject()
-                        .put("month", c.stringOf("month"))
-                        .put("total_balance", c.longOf("total_balance"))
-                        .put("total_income", c.longOf("total_income"))
-                        .put("total_expense", c.longOf("total_expense"))
-                        .put("fee_percent", c.getDouble(c.getColumnIndexOrThrow("fee_percent")))
-                        .put("fee_expense", c.longOf("fee_expense"))
-                        .put("updated_at", c.longOf("updated_at"))
-                        .put("source", c.stringOf("source")),
-                )
+                json.beginObject()
+                json.name("month").value(c.stringOf("month"))
+                json.name("total_balance").value(c.longOf("total_balance"))
+                json.name("total_income").value(c.longOf("total_income"))
+                json.name("total_expense").value(c.longOf("total_expense"))
+                json.name("fee_percent")
+                    .value(c.getDouble(c.getColumnIndexOrThrow("fee_percent")))
+                json.name("fee_expense").value(c.longOf("fee_expense"))
+                json.name("updated_at").value(c.longOf("updated_at"))
+                json.name("source").value(c.stringOf("source"))
+                json.endObject()
             }
         }
-        root.put("snapshots", snapshots)
+        json.endArray()
 
-        val transfers = JSONArray()
+        json.name("transfers").beginArray()
         db.query("transfer_log", null, null, null, null, null, "id ASC").use { c ->
             while (c.moveToNext()) {
-                val item = JSONObject()
-                    .put("id", c.longOf("id"))
-                    .put("amount", c.longOf("amount"))
-                    .put("occurred_at", c.longOf("occurred_at"))
-                    .put("month", c.stringOf("month"))
-                listOf("from_wallet_id", "to_wallet_id").forEach { column ->
+                json.beginObject()
+                json.name("id").value(c.longOf("id"))
+                json.name("amount").value(c.longOf("amount"))
+                json.name("occurred_at").value(c.longOf("occurred_at"))
+                json.name("month").value(c.stringOf("month"))
+                for (column in listOf("from_wallet_id", "to_wallet_id")) {
                     val idx = c.getColumnIndexOrThrow(column)
-                    item.put(column, if (c.isNull(idx)) JSONObject.NULL else c.getLong(idx))
+                    json.name(column)
+                    if (c.isNull(idx)) json.nullValue() else json.value(c.getLong(idx))
                 }
-                transfers.put(item)
+                json.endObject()
             }
         }
-        root.put("transfers", transfers)
+        json.endArray()
 
-        return root.toString(2)
+        json.endObject()
+        json.flush()
     }
 
     /** Reads only the summary of a backup file, before the replace confirmation. */
@@ -1137,6 +1296,23 @@ class Repo(context: Context) {
     companion object {
         private const val BACKUP_APP = "nabungah"
         private const val BACKUP_VERSION = 6
+
+        private val ACTIVITY_SOURCE = """
+            FROM (
+                SELECT 'trx' AS kind, t.id, t.title, t.note, t.amount, t.type, t.wallet_id,
+                       t.occurred_at, t.month, NULL AS from_wallet_id, NULL AS to_wallet_id,
+                       COALESCE(w.name, '') AS wallet_name, '' AS from_name, '' AS to_name
+                FROM trx t
+                LEFT JOIN wallet w ON w.id = t.wallet_id
+                UNION ALL
+                SELECT 'transfer', l.id, '', '', l.amount, 'transfer', NULL,
+                       l.occurred_at, l.month, l.from_wallet_id, l.to_wallet_id,
+                       '', COALESCE(f.name, ''), COALESCE(tw.name, '')
+                FROM transfer_log l
+                LEFT JOIN wallet f ON f.id = l.from_wallet_id
+                LEFT JOIN wallet tw ON tw.id = l.to_wallet_id
+            ) rows
+        """.trimIndent()
         private const val PREFS_NAME = "nabungah_sync"
         private const val KEY_LAST_AUTO_MONTH = "last_auto_month"
         private const val KEY_FEE_PERCENT = "fee_percent"

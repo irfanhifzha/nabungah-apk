@@ -368,7 +368,7 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     color = Muted,
                 )
                 Spacer(Modifier.height(12.dp))
-                DangerAction("Hapus transaksi", data.transactions.size) {
+                DangerAction("Hapus transaksi", data.transactionCount) {
                     onSheet(Sheet.DeleteTransactions)
                 }
                 Spacer(Modifier.height(8.dp))
@@ -487,7 +487,7 @@ private fun DataSummary(data: AppData) {
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SummaryMetric("Dompet", data.wallets.size.toString(), Modifier.weight(1f))
-            SummaryMetric("Transaksi", data.transactions.size.toString(), Modifier.weight(1f))
+            SummaryMetric("Transaksi", data.transactionCount.toString(), Modifier.weight(1f))
             SummaryMetric("Target", data.goals.size.toString(), Modifier.weight(1f))
         }
     }

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.AppData
+import com.nabungah.data.ReviewMonthData
 import com.nabungah.data.Snapshot
 import kotlin.math.roundToInt
 
@@ -52,13 +53,15 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
-    val months = remember(data.transactions, data.snapshots, data.currentMonth) {
-        (data.transactions.map { it.month } + data.snapshots.map { it.month } + data.currentMonth)
+    val months = remember(data.transactionMonths, data.snapshots, data.currentMonth) {
+        (data.transactionMonths + data.snapshots.map { it.month } + data.currentMonth)
             .distinct()
             .sortedDescending()
     }
     var month by rememberSaveable { mutableStateOf(data.currentMonth) }
     var message by remember { mutableStateOf<String?>(null) }
+    var monthData by remember { mutableStateOf(ReviewMonthData()) }
+    var previousData by remember { mutableStateOf(ReviewMonthData()) }
 
     LaunchedEffect(months) {
         if (month !in months) month = months.firstOrNull() ?: data.currentMonth
@@ -70,10 +73,26 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
     val snapshot = data.snapshots.firstOrNull { it.month == month }
     LaunchedEffect(month) { message = null }
 
+    val index = months.indexOf(month)
+    val older = months.getOrNull(index + 1)
+    val newer = if (index > 0) months[index - 1] else null
+
+    LaunchedEffect(month, older, vm.dataRevision) {
+        monthData = vm.reviewMonth(month)
+        previousData = older?.let { vm.reviewMonth(it) } ?: ReviewMonthData()
+    }
+
     // The live fee comes from the saved setting, never from a per-screen draft.
     val feePercent = data.feePercent
-    val report = remember(data.transactions, data.totalBalance, month, feePercent) {
-        buildMonthReport(month, data.transactions, data.totalBalance, feePercent)
+    val activeData = monthData.takeIf { it.month == month } ?: ReviewMonthData(month = month)
+    val report = remember(activeData, data.totalBalance, month, feePercent) {
+        buildMonthReport(
+            month,
+            activeData.transactions,
+            data.totalBalance,
+            feePercent,
+            activeData.netAfter,
+        )
     }
 
     val isCurrentMonth = month == data.currentMonth
@@ -86,11 +105,14 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
             snapshot.totalBalance != report.balance
         )
 
-    val index = months.indexOf(month)
-    val older = months.getOrNull(index + 1)
-    val newer = if (index > 0) months[index - 1] else null
     val previousReport = older?.let { previous ->
-        buildMonthReport(previous, data.transactions, data.totalBalance, feePercent)
+        buildMonthReport(
+            previous,
+            previousData.takeIf { it.month == previous }?.transactions.orEmpty(),
+            data.totalBalance,
+            feePercent,
+            previousData.takeIf { it.month == previous }?.netAfter ?: 0L,
+        )
     }
     val incomeTrend = previousReport?.let { changeLabel(report.income, it.income) }
     val expenseTrend = previousReport?.let { changeLabel(report.expense, it.expense) }
@@ -161,7 +183,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 title = "Statistik ${Fmt.monthLabel(month)}",
                 actions = {
                     CopyButton(
-                        text = monthCopyText(month, report, data.transactions, data.walletNames),
+                        text = monthCopyText(month, report, activeData.transactions, data.walletNames),
                     )
                 },
             ) {
