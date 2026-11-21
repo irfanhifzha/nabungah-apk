@@ -48,8 +48,14 @@ INI RENCANA UNTUK VERSI `1.3`.
   `maxLines = 1`, jadi teks Rp tidak lagi menempel di tepi kartu.
 - [x] Kartu dompet di Home diubah menjadi grid dua kolom berukuran persegi (`aspectRatio(1f)`):
   avatar + persen di atas, nama/nominal/progress bar di bawah.
-- [ ] Putuskan apakah tiga perubahan pasca-tag di atas dirilis sebagai 1.3.1 (tag `v1.3` sudah
-  terbit dan tidak menyertakan perubahan ini).
+- [x] Actions dimodernkan: `checkout@v7`, `setup-java@v6`, `setup-gradle@v6`,
+  `upload-artifact@v7`, `action-gh-release@v3` (semua runtime Node 24). Diuji lewat
+  `workflow_dispatch` (run 44884200897, hijau 2m39s) tanpa membuat tag atau release baru;
+  langkah Publish dilewati sesuai desain.
+- [ ] Putuskan apakah tiga perubahan pasca-tag (saldo di Laporan, padding nominal, kartu dompet
+  persegi) dirilis sebagai 1.3.1 — tag `v1.3` sudah terbit dan tidak menyertakan perubahan ini.
+- [ ] Pertimbangkan naik Gradle 8.14.3 ke versi terbaru; Actions memberi peringatan EOL, tapi
+  build dan rilis masih hijau.
 - [ ] ...
 - [x] Tag `v1.3` sudah dipush. Workflow rilis hijau (3m12s): unit test, build, upload
   artifact, dan GitHub Release terbit di https://github.com/irfanhifzha/nabungah-apk/releases/tag/v1.3
