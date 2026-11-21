@@ -13,15 +13,20 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,8 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.AppData
@@ -171,8 +182,12 @@ private fun TypeSelector(type: String, onChange: (String) -> Unit) {
 
 @Composable
 private fun SaveButton(label: String, onClick: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
     Button(
-        onClick = onClick,
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+            onClick()
+        },
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp),
@@ -181,28 +196,66 @@ private fun SaveButton(label: String, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateField(label: String, millis: Long, onChange: (Long) -> Unit) {
+    var showPicker by rememberSaveable { mutableStateOf(false) }
+    OutlinedActionButton(
+        text = "$label: ${Fmt.dateLabel(millis)}",
+        onClick = { showPicker = true },
+        modifier = Modifier.fillMaxWidth(),
+        color = Muted,
+    )
+    if (showPicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = Fmt.utcDateMillis(millis))
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { picked ->
+                        onChange(Fmt.mergePickedDate(picked))
+                    }
+                    showPicker = false
+                }) { Text("Pilih") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Batal") }
+            },
+        ) {
+            DatePicker(state = state)
+        }
+    }
+}
+
 // -------------------------------------------------------------- add wallet
 
 @Composable
 fun AddWalletSheet(vm: MainViewModel, onClose: () -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var balance by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var balance by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun submit() {
+        vm.addWallet(
+            name = name,
+            balance = Fmt.digitsToLong(balance),
+            onError = { error = it },
+            onDone = onClose,
+        )
+    }
 
     SheetColumn {
         SheetTitle("Tambah Dompet")
         SheetNote("Isi saldo dompet saat ini. Dompet baru tidak harus mulai dari 0.")
         LabeledTextField(value = name, onValueChange = { name = it }, label = "Nama Dompet")
-        MoneyField(label = "Saldo Awal", digits = balance, onDigitsChange = { balance = it })
+        MoneyField(
+            label = "Saldo Awal",
+            digits = balance,
+            onDigitsChange = { balance = it },
+            onDone = { submit() },
+        )
         FormError(error)
-        SaveButton("Simpan Dompet") {
-            vm.addWallet(
-                name = name,
-                balance = Fmt.digitsToLong(balance),
-                onError = { error = it },
-                onDone = onClose,
-            )
-        }
+        SaveButton("Simpan Dompet") { submit() }
     }
 }
 
@@ -215,15 +268,145 @@ fun NewTransactionSheet(
     prefill: QuickAction?,
     onClose: () -> Unit,
 ) {
-    var title by remember { mutableStateOf(prefill?.title ?: "") }
-    var amount by remember { mutableStateOf(prefill?.amount?.toString() ?: "") }
-    var type by remember { mutableStateOf(prefill?.type ?: "expense") }
-    var walletId by remember { mutableStateOf<Long?>(null) }
-    var note by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var title by rememberSaveable { mutableStateOf(prefill?.title ?: "") }
+    var amount by rememberSaveable { mutableStateOf(prefill?.amount?.toString() ?: "") }
+    var type by rememberSaveable { mutableStateOf(prefill?.type ?: "expense") }
+    var walletId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var note by rememberSaveable { mutableStateOf("") }
+    var occurredAt by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    val amountFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    // A quick action should land directly in the amount field, ready to save.
+    LaunchedEffect(prefill) {
+        if (prefill != null) {
+            amountFocus.requestFocus()
+            keyboard?.show()
+        }
+    }
+
+    fun submit() {
+        vm.addTransaction(
+            title = title,
+            amount = Fmt.digitsToLong(amount),
+            type = type,
+            walletId = walletId,
+            note = note,
+            occurredAt = occurredAt,
+            onError = { error = it },
+            onDone = onClose,
+        )
+    }
 
     SheetColumn {
         SheetTitle("Transaksi Baru")
+        LabeledTextField(value = title, onValueChange = { title = it }, label = "Judul")
+        MoneyField(
+            label = "Nominal",
+            digits = amount,
+            onDigitsChange = { amount = it },
+            modifier = Modifier.focusRequester(amountFocus),
+            onDone = { submit() },
+        )
+        TypeSelector(type = type, onChange = { type = it })
+        PickerField(
+            label = "Dompet",
+            selectedLabel = wallets.firstOrNull { it.id == walletId }?.name ?: "",
+            options = wallets.map { it.id to it.name },
+            onSelect = { walletId = it },
+        )
+        DateField(label = "Tanggal", millis = occurredAt, onChange = { occurredAt = it })
+        LabeledTextField(
+            value = note,
+            onValueChange = { note = it },
+            label = "Catatan (opsional)",
+            singleLine = false,
+            minLines = 2,
+        )
+        FormError(error)
+        SaveButton("Simpan Transaksi") { submit() }
+    }
+}
+
+@Composable
+fun TransactionDetailSheet(
+    vm: MainViewModel,
+    trx: Trx,
+    walletName: String,
+    onEdit: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+
+    SheetColumn {
+        SheetTitle("Detail Transaksi")
+        Text(
+            text = trx.title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = (if (trx.type == "income") "+ " else "- ") + Fmt.rp(trx.amount),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (trx.type == "income") IncomeGreen else ExpenseRed,
+        )
+        SheetNote(
+            "${if (trx.type == "income") "Pemasukan" else "Pengeluaran"} · ${trx.month}\n" +
+                "Dompet: $walletName\nTanggal: ${Fmt.timestamp(trx.occurredAt)}\n" +
+                "Catatan: ${trx.note.ifBlank { "-" }}",
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CopyButton(text = trxCopyText(trx, walletName), modifier = Modifier.weight(1f))
+            OutlinedActionButton(
+                text = "Edit",
+                onClick = onEdit,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        OutlinedActionButton(
+            text = "Hapus transaksi",
+            onClick = { confirmDelete = true },
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.error,
+        )
+        FormError(error)
+    }
+
+    if (confirmDelete) {
+        ConfirmDialog(
+            title = "Hapus transaksi?",
+            message = "\"${trx.title}\" (${Fmt.rp(trx.amount)}) akan dihapus dan efeknya pada " +
+                "dompet dibalik. Kamu bisa mengurungkannya lewat snackbar.",
+            onConfirm = {
+                vm.deleteTransaction(trx.id)
+                onClose()
+            },
+            onDismiss = { confirmDelete = false },
+        )
+    }
+}
+
+@Composable
+fun EditTransactionSheet(
+    vm: MainViewModel,
+    trx: Trx,
+    wallets: List<Wallet>,
+    onClose: () -> Unit,
+) {
+    var title by rememberSaveable { mutableStateOf(trx.title) }
+    var amount by rememberSaveable { mutableStateOf(trx.amount.toString()) }
+    var type by rememberSaveable { mutableStateOf(trx.type) }
+    var walletId by rememberSaveable { mutableStateOf(trx.walletId) }
+    var note by rememberSaveable { mutableStateOf(trx.note) }
+    var occurredAt by rememberSaveable { mutableStateOf(trx.occurredAt) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+
+    SheetColumn {
+        SheetTitle("Edit Transaksi")
+        SheetNote("Perubahan saldo dompet dihitung ulang dalam satu transaksi database.")
         LabeledTextField(value = title, onValueChange = { title = it }, label = "Judul")
         MoneyField(label = "Nominal", digits = amount, onDigitsChange = { amount = it })
         TypeSelector(type = type, onChange = { type = it })
@@ -233,6 +416,7 @@ fun NewTransactionSheet(
             options = wallets.map { it.id to it.name },
             onSelect = { walletId = it },
         )
+        DateField(label = "Tanggal", millis = occurredAt, onChange = { occurredAt = it })
         LabeledTextField(
             value = note,
             onValueChange = { note = it },
@@ -241,13 +425,15 @@ fun NewTransactionSheet(
             minLines = 2,
         )
         FormError(error)
-        SaveButton("Simpan Transaksi") {
-            vm.addTransaction(
+        SaveButton("Simpan Perubahan") {
+            vm.updateTransaction(
+                id = trx.id,
                 title = title,
                 amount = Fmt.digitsToLong(amount),
                 type = type,
                 walletId = walletId,
                 note = note,
+                occurredAt = occurredAt,
                 onError = { error = it },
                 onDone = onClose,
             )
@@ -259,10 +445,10 @@ fun NewTransactionSheet(
 
 @Composable
 fun AddQuickActionSheet(vm: MainViewModel, onClose: () -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("expense") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var title by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("expense") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
 
     SheetColumn {
         SheetTitle("Aksi Cepat Baru")
@@ -287,35 +473,42 @@ fun AddQuickActionSheet(vm: MainViewModel, onClose: () -> Unit) {
 
 @Composable
 fun AddGoalSheet(vm: MainViewModel, onClose: () -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var target by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var title by rememberSaveable { mutableStateOf("") }
+    var target by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun submit() {
+        vm.addGoal(
+            title = title,
+            target = Fmt.digitsToLong(target),
+            onError = { error = it },
+            onDone = onClose,
+        )
+    }
 
     SheetColumn {
         SheetTitle("Buat Target")
         SheetNote("Target tidak terhubung ke dompet. Pindahkan uangnya secara manual.")
         LabeledTextField(value = title, onValueChange = { title = it }, label = "Nama Target")
-        MoneyField(label = "Jumlah Target", digits = target, onDigitsChange = { target = it })
+        MoneyField(
+            label = "Jumlah Target",
+            digits = target,
+            onDigitsChange = { target = it },
+            onDone = { submit() },
+        )
         FormError(error)
-        SaveButton("Buat Target") {
-            vm.addGoal(
-                title = title,
-                target = Fmt.digitsToLong(target),
-                onError = { error = it },
-                onDone = onClose,
-            )
-        }
+        SaveButton("Buat Target") { submit() }
     }
 }
 
 @Composable
 fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
-    var title by remember { mutableStateOf(goal.title) }
-    var target by remember { mutableStateOf(goal.targetAmount.toString()) }
-    var saved by remember { mutableStateOf(goal.savedAmount.toString()) }
-    var status by remember { mutableStateOf(goal.status) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var confirmRemove by remember { mutableStateOf(false) }
+    var title by rememberSaveable { mutableStateOf(goal.title) }
+    var target by rememberSaveable { mutableStateOf(goal.targetAmount.toString()) }
+    var saved by rememberSaveable { mutableStateOf(goal.savedAmount.toString()) }
+    var status by rememberSaveable { mutableStateOf(goal.status) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
 
     SheetColumn {
         SheetTitle("Edit Target")
@@ -371,15 +564,15 @@ fun EditGoalSheet(vm: MainViewModel, goal: Goal, onClose: () -> Unit) {
 
 @Composable
 fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit) {
-    var amount by remember { mutableStateOf("") }
-    var fromId by remember { mutableStateOf<Long?>(null) }
-    var toId by remember { mutableStateOf<Long?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var confirm by remember { mutableStateOf(false) }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var fromId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var toId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirm by rememberSaveable { mutableStateOf(false) }
 
     fun localError(): String? {
         val value = Fmt.digitsToLong(amount)
-        if (value <= 1000) return "Nominal harus lebih dari 1.000"
+        if (value <= 1000) return "Minimal transfer Rp 1.001"
         if (fromId == null || toId == null) return "Pilih kedua dompet"
         if (fromId == toId) return "Dompet asal dan tujuan tidak boleh sama"
         return null
@@ -438,7 +631,7 @@ fun TransferSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit)
 @Composable
 fun EditFeeSheet(vm: MainViewModel, current: Double, onClose: () -> Unit) {
     var percent by rememberSaveable { mutableStateOf(Fmt.feePercentLabel(current)) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     val value = Fmt.parseFee(percent)
 
     SheetColumn {
@@ -552,7 +745,7 @@ fun EditReportSheet(
 fun DeleteWalletsSheet(vm: MainViewModel, wallets: List<Wallet>, onClose: () -> Unit) {
     var pending by remember { mutableStateOf<Wallet?>(null) }
     var pendingAll by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
 
     SheetColumn {
         SheetTitle("Hapus Dompet")
@@ -610,7 +803,7 @@ fun DeleteTransactionsSheet(
 ) {
     var pending by remember { mutableStateOf<Trx?>(null) }
     var pendingAll by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
 
     SheetColumn {
         SheetTitle("Hapus Transaksi")
@@ -664,7 +857,7 @@ fun DeleteTransactionsSheet(
 fun DeleteQuickActionsSheet(vm: MainViewModel, actions: List<QuickAction>, onClose: () -> Unit) {
     var pending by remember { mutableStateOf<QuickAction?>(null) }
     var pendingAll by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
 
     SheetColumn {
         SheetTitle("Hapus Aksi Cepat")
@@ -717,7 +910,7 @@ fun DeleteQuickActionsSheet(vm: MainViewModel, actions: List<QuickAction>, onClo
 fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: () -> Unit) {
     var pending by remember { mutableStateOf<Snapshot?>(null) }
     var pendingAll by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
 
     SheetColumn {
         SheetTitle("Hapus Data Bulanan")
@@ -772,7 +965,7 @@ fun DeleteSnapshotsSheet(vm: MainViewModel, snapshots: List<Snapshot>, onClose: 
 @Composable
 fun DeleteAllDataSheet(vm: MainViewModel, data: AppData, onClose: () -> Unit) {
     var typed by rememberSaveable { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     val confirmed = typed.trim().uppercase() == "HAPUS"
 
     SheetColumn {

@@ -47,6 +47,7 @@ import kotlin.math.roundToInt
 /** Home: balance, wallets, quick entry, goals and the last few movements. */
 @Composable
 fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
+    val openTransaction: (com.nabungah.data.Trx) -> Unit = { onSheet(Sheet.TransactionDetail(it)) }
     val recent = data.transactions.take(5)
 
     LazyColumn(
@@ -56,6 +57,15 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
     ) {
         item { GreetingHeader() }
         item { BalanceHero(data) }
+        if (data.wallets.isEmpty() || data.transactions.isEmpty()) {
+            item {
+                OnboardingCard(
+                    hasWallet = data.wallets.isNotEmpty(),
+                    onAddWallet = { onSheet(Sheet.AddWallet) },
+                    onAddTransaction = { onSheet(Sheet.NewTransaction()) },
+                )
+            }
+        }
         item {
             WalletsSection(
                 data = data,
@@ -123,7 +133,11 @@ fun HomeTab(data: AppData, onSheet: (Sheet) -> Unit, onSeeAll: () -> Unit) {
             }
         } else {
             items(recent, key = { it.id }) { trx ->
-                TransactionRow(trx, data.walletNames[trx.walletId] ?: "Dompet tidak dikenal")
+                TransactionRow(
+                    trx = trx,
+                    walletName = data.walletNames[trx.walletId] ?: "Dompet tidak dikenal",
+                    onClick = { openTransaction(trx) },
+                )
             }
         }
     }
@@ -143,6 +157,43 @@ private fun GreetingHeader() {
             text = "Uangmu, di mana pun berada.",
             style = MaterialTheme.typography.bodySmall,
             color = Muted,
+        )
+    }
+}
+
+// --------------------------------------------------------------- onboarding
+
+@Composable
+private fun OnboardingCard(
+    hasWallet: Boolean,
+    onAddWallet: () -> Unit,
+    onAddTransaction: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .appCard(color = SoftTeal)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = if (hasWallet) "Satu langkah lagi" else "Mulai dalam 3 langkah",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = if (hasWallet) {
+                "Catat transaksi pertamamu supaya saldo dan laporan mulai bergerak."
+            } else {
+                "Buat dompet → catat transaksi → buat target. Semua data tetap di perangkat ini."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+        )
+        OutlinedActionButton(
+            text = if (hasWallet) "Catat transaksi pertama" else "Buat dompet pertama",
+            onClick = if (hasWallet) onAddTransaction else onAddWallet,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

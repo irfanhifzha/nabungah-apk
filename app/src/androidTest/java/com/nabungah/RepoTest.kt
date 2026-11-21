@@ -132,7 +132,7 @@ class RepoTest {
         assertTrue(loaded.transactions.isEmpty())
 
         assertEquals(
-            "Nominal harus lebih dari 1.000",
+            "Minimal transfer Rp 1.001",
             runCatching { repo.transfer(1_000, cash, bank) }.exceptionOrNull()?.message,
         )
         assertEquals(
@@ -322,4 +322,141 @@ class RepoTest {
         assertTrue(loaded.transactions.isEmpty())
         assertEquals(10_000L, loaded.wallets.single().balance)
     }
+
+    @Test
+    fun backdatedTransactionUsesItsOwnMonth() {
+        repo.addWallet("Cash", 100_000)
+        val cash = walletId("Cash")
+        val old = System.currentTimeMillis() - 45L * 24 * 60 * 60 * 1000
+
+        repo.addTransaction("Lupa catat", 25_000, "expense", cash, "", old)
+
+        val trx = repo.load().transactions.single()
+        assertEquals(FmtForTest.month(old), trx.month)
+        assertEquals(old, trx.occurredAt)
+        assertEquals(75_000L, repo.load().wallets.single().balance)
+    }
+
+    @Test
+    fun editingTransactionMovesWalletAndMonthAtomically() {
+        repo.addWallet("Cash", 100_000)
+        val cash = walletId("Cash")
+        repo.addTransaction("Kopi", 20_000, "expense", cash, "")
+        val trx = repo.load().transactions.single()
+        val old = System.currentTimeMillis() - 45L * 24 * 60 * 60 * 1000
+
+        repo.updateTransaction(trx.id, "Gaji", 50_000, "income", cash, "bonus", old)
+
+        val loaded = repo.load()
+        assertEquals(150_000L, loaded.wallets.single().balance)
+        assertEquals("income", loaded.transactions.single().type)
+        assertEquals("Gaji", loaded.transactions.single().title)
+        assertEquals(FmtForTest.month(old), loaded.transactions.single().month)
+    }
+
+    @Test
+    fun bulkDeleteReversesEverySelectedRow() {
+        repo.addWallet("Cash", 100_000)
+        val cash = walletId("Cash")
+        repo.addTransaction("A", 10_000, "expense", cash, "")
+        repo.addTransaction("B", 20_000, "expense", cash, "")
+        repo.addTransaction("C", 5_000, "income", cash, "")
+        val ids = repo.load().transactions.take(2).map { it.id }
+
+        repo.deleteTransactions(ids)
+
+        assertEquals(115_000L, repo.load().wallets.single().balance)
+        assertEquals(1, repo.load().transactions.size)
+    }
+
+    @Test
+    fun goalCompletesAutomaticallyAndCanBeCancelled() {
+        repo.addGoal("Laptop", 1_000_000)
+        val goal = repo.load().goals.single()
+
+        repo.updateGoal(goal.id, "Laptop", 1_000_000, 1_000_000, "in_progress")
+        assertEquals("completed", repo.load().goals.single().status)
+
+        repo.updateGoal(goal.id, "Laptop", 1_000_000, 1_000_000, "cancelled")
+        assertEquals("cancelled", repo.load().goals.single().status)
+    }
+
+    @Test
+    fun auditDetectsAndFixesDrift() {
+        repo.addWallet("Cash", 100_000)
+        val cash = walletId("Cash")
+        repo.addTransaction("Kopi", 20_000, "expense", cash, "")
+
+        // Simulate an old buggy write directly against the database.
+        repo.debugSetWalletBalance(cash, 99_000)
+
+        val report = repo.auditConsistency()
+        assertTrue(report.hasIssues)
+        assertEquals(1, report.walletDrift.size)
+        assertEquals(1_000L, report.walletDrift.single().difference)
+
+        repo.fixConsistency()
+        assertEquals(80_000L, repo.load().wallets.single().balance)
+        assertTrue(!repo.auditConsistency().hasIssues)
+    }
+
+    @Test
+    fun backupPreviewAndStartingBalanceRoundTrip() {
+        repo.addWallet("Cash", 100_000)
+        repo.addTransaction("Kopi", 20_000, "expense", walletId("Cash"), "")
+
+        val json = repo.exportJson()
+        val preview = repo.inspectBackup(json)
+        assertEquals(4, preview.version)
+        assertEquals(1, preview.wallets)
+        assertEquals(1, preview.transactions)
+
+        repo.deleteAllTransactions()
+        repo.deleteAllWallets()
+        repo.importJson(json)
+
+        val wallet = repo.load().wallets.single()
+        assertEquals(100_000L, wallet.startingBalance)
+        assertEquals(80_000L, wallet.balance)
+    }
+
+    @Test
+    fun invalidBackupFieldsAreRejected() {
+        repo.addWallet("Cash", 5_000)
+        val badType = """{"app":"nabungah","version":4,"wallets":[
+            {"id":1,"name":"Cash","balance":5000,"starting_balance":5000,
+             "created_at":0,"updated_at":0}
+        ],"transactions":[
+            {"id":1,"title":"X","amount":100,"type":"hack","note":"",
+             "occurred_at":1,"month":"1970-01","wallet_id":1}
+        ]}"""
+        val duplicate = """{"app":"nabungah","version":4,"wallets":[
+            {"id":1,"name":"A","balance":0,"starting_balance":0,
+             "created_at":0,"updated_at":0},
+            {"id":1,"name":"B","balance":0,"starting_balance":0,
+             "created_at":0,"updated_at":0}
+        ]}"""
+        val negativeSnapshot = """{"app":"nabungah","version":4,"snapshots":[
+            {"month":"2026-01","total_balance":-1,"total_income":0,
+             "total_expense":0,"fee_percent":2.5,"fee_expense":0,
+             "updated_at":0,"source":"manual"}
+        ]}"""
+
+        listOf(badType, duplicate, negativeSnapshot).forEach { text ->
+            try {
+                repo.importJson(text)
+                fail("Expected validation failure")
+            } catch (e: ValidationException) {
+                // expected
+            }
+            assertEquals(1, repo.load().wallets.size)
+            assertEquals(5_000L, repo.load().wallets.single().balance)
+        }
+    }
+}
+
+private object FmtForTest {
+    fun month(millis: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US)
+            .format(java.util.Date(millis))
 }

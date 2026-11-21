@@ -83,8 +83,14 @@ INI RENCANA UNTUK VERSI `1.3`.
   untuk pemasukan/pengeluaran/transfer, tap tanggal untuk daftar aktivitas hari itu, plus filter tipe.
 - [x] Laporan mendapat dashboard statistik: 6 tile (pemasukan, pengeluaran, selisih, rata-rata,
   jumlah transaksi, biaya), tren persen vs bulan sebelumnya, saldo akhir bulan, dan pengeluaran terbesar.
-- [ ] ...
-
-nanti lagi..
-- [ ] lanjutkan todo.md
+- [x] Batch 1.4: skema v4 (`starting_balance`, CHECK, migrasi v1→v4 + test), snackbar + Undo,
+  form `rememberSaveable`, backdate + date picker, quick action fokus nominal, rollover bulan,
+  detail/edit/hapus massal transaksi, goal selesai otomatis, audit konsistensi + perbaikan,
+  backup preview + info ekspor, filter dompet + "Bulan ini", onboarding, haptic, dark theme,
+  adaptive/themed icon, navigation rail ≥600dp, `androidComponents`, Compose UI test.
+- [x] Build 1.4: 14 unit test lulus, compile androidTest sukses, `assembleDebug` dan
+  `assembleRelease` sukses. APK rilis 1.533.314 byte, bertanda tangan `CN=Nabungah`.
+  Belum ada commit/push/tag untuk batch ini.
+- [ ] Ditunda dan butuh keputusan produk/pekerjaan terpisah: grafik, kategori/tag, widget,
+  layout dua kolom tablet, uji perangkat fisik (TalkBack/font scale/cold start).
 - [ ] ...

@@ -4,6 +4,8 @@ data class Wallet(
     val id: Long,
     val name: String,
     val balance: Long,
+    /** Balance before any recorded transaction, used to audit [balance]. */
+    val startingBalance: Long = 0,
 )
 
 data class Trx(
@@ -73,8 +75,38 @@ data class AppData(
     val currentMonth: String = "",
     val monthIncome: Long = 0,
     val monthExpense: Long = 0,
+    val lastBackupAt: Long = 0,
+    val lastBackupBytes: Long = 0,
 ) {
     // Computed once per loaded snapshot instead of on every row/composition read.
     val totalBalance: Long = wallets.sumOf { it.balance }
     val walletNames: Map<Long, String> = wallets.associate { it.id to it.name }
+}
+
+data class BackupPreview(
+    val version: Int,
+    val exportedAt: Long,
+    val wallets: Int,
+    val transactions: Int,
+    val transfers: Int,
+    val goals: Int,
+    val quickActions: Int,
+    val snapshots: Int,
+)
+
+data class WalletDrift(
+    val name: String,
+    val stored: Long,
+    val expected: Long,
+) {
+    val difference: Long get() = stored - expected
+}
+
+data class ConsistencyReport(
+    val walletDrift: List<WalletDrift> = emptyList(),
+    val monthMismatches: Int = 0,
+    val snapshotIssues: Int = 0,
+) {
+    val issueCount: Int get() = walletDrift.size + monthMismatches + snapshotIssues
+    val hasIssues: Boolean get() = issueCount > 0
 }

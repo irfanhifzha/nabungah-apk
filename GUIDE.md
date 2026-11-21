@@ -59,7 +59,7 @@ This split is the product's structure; keep it.
 
 ### Date & month rules
 
-- **Transaction dates are always "now".** There is no date picker. Every saved transaction takes the device-local timestamp at save time.
+- **Transaction dates can be backdated.** The form offers a date picker (default: now); a saved transaction keeps the chosen local timestamp, and its `month` is derived from that date. Future dates are rejected.
 - Month key is `YYYY-MM` derived from the local timestamp (`2026-05`).
 - Display of a transaction timestamp: weekday short, `dd/MM/yyyy`, `HH:mm`, 24-hour, `id-ID`.
 - All grouping/filtering by month uses device-local time. State the timezone assumption explicitly in the rebuild (device timezone, no UTC conversion surprises).
@@ -155,7 +155,7 @@ transaction (`dd/MM {title} — ± Rp {amount} · {wallet}`).
   - keep balances untouched and state it loudly in the delete confirmation.
   
   Whichever you pick, the spec must be explicit and the behavior tested.
-- **No editing of transactions.** If you add edit, it must adjust the wallet balance by the delta and must handle a change of type, amount, or wallet atomically.
+- **Transactions can be edited.** Editing reverses the old wallet effect and applies the new type, amount, wallet, and date atomically in one database transaction; a failed edit leaves both row and balance untouched. Wallet names remain non-editable.
 
 ---
 
@@ -318,11 +318,12 @@ Suggested schema. All monetary columns are rupiah `INTEGER`. Timestamps stored a
 
 ```sql
 wallet (
-  id            INTEGER PRIMARY KEY,
-  name          TEXT    NOT NULL,
-  balance       INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
-  created_at    INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL
+  id               INTEGER PRIMARY KEY,
+  name             TEXT    NOT NULL,
+  balance          INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  starting_balance INTEGER NOT NULL DEFAULT 0 CHECK (starting_balance >= 0),
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL
 );
 
 trx (
@@ -332,7 +333,7 @@ trx (
   type          TEXT    NOT NULL CHECK (type IN ('income','expense')),
   wallet_id     INTEGER REFERENCES wallet(id) ON DELETE SET NULL,
   note          TEXT    NOT NULL DEFAULT '',
-  occurred_at   INTEGER NOT NULL,          -- always "now" at insert
+  occurred_at   INTEGER NOT NULL,          -- chosen date or now; month derives from it
   month         TEXT    NOT NULL           -- 'YYYY-MM', derived from occurred_at
 );
 CREATE INDEX idx_trx_month ON trx(month);
@@ -360,11 +361,11 @@ goal (
 
 month_snapshot (
   month         TEXT PRIMARY KEY,          -- 'YYYY-MM', upsert target
-  total_balance INTEGER NOT NULL,
-  total_income  INTEGER NOT NULL,
-  total_expense INTEGER NOT NULL,
-  fee_percent   REAL    NOT NULL DEFAULT 2.5,
-  fee_expense   INTEGER NOT NULL,
+  total_balance INTEGER NOT NULL CHECK (total_balance >= 0),
+  total_income  INTEGER NOT NULL CHECK (total_income >= 0),
+  total_expense INTEGER NOT NULL CHECK (total_expense >= 0),
+  fee_percent   REAL    NOT NULL DEFAULT 2.5 CHECK (fee_percent BETWEEN 0 AND 100),
+  fee_expense   INTEGER NOT NULL CHECK (fee_expense >= 0),
   updated_at    INTEGER NOT NULL,
   source        TEXT    NOT NULL DEFAULT 'manual'
                 CHECK (source IN ('auto','manual'))   -- schema v2
@@ -436,4 +437,4 @@ These are real inconsistencies in the original. Each needs an explicit decision 
 
 ## 15. Out of scope
 
-Multi-user, accounts/auth, cloud sync, budgets per category, recurring transactions, charts/analytics screens, currency conversion, CSV/Sheets export, ads, sharing, dark-mode theming (unless added cheaply and deliberately), and anything else not described above. The value of this app is that it is small and does one job.
+Multi-user, accounts/auth, cloud sync, budgets per category, recurring transactions, charts/analytics screens, currency conversion, CSV/Sheets export, ads, sharing, and anything else not described above. The value of this app is that it is small and does one job; dark theming is now supported because it adds no data or network surface.

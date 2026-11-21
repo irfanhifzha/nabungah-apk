@@ -21,6 +21,12 @@ class MainActivity : ComponentActivity() {
 
     private val vm: MainViewModel by viewModels()
 
+    override fun onResume() {
+        super.onResume()
+        // An app left open overnight keeps yesterday's month until this check runs.
+        vm.checkMonthRollover()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

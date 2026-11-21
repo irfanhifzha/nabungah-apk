@@ -16,12 +16,12 @@ the implementation that satisfies it.
 | Screens | One activity; four tabs (Home, Activity, Review, Settings) + modal bottom sheets |
 | Architecture | Activity → Compose shell → `MainViewModel` → `Repo` → SQLite |
 | Dependency injection | None (manual construction) |
-| Navigation | Bottom bar only; selected tab is Compose state (no NavHost, fragments or routes) |
+| Navigation | Bottom bar, or a rail above 600 dp; selected tab is Compose state (no NavHost) |
 | Networking | None. No `INTERNET` permission, no analytics/crash SDK |
 | min / target / compile SDK | 24 / 35 / 35 |
 | Build | AGP 8.9.1, Gradle 8.14.3, JDK 17 |
-| Version | 1.3 (`versionCode` 3), schema v3 |
-| Release APK | ~1.3 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
+| Version | 1.4 (`versionCode` 4), schema v4 |
+| Release APK | ~1.5 MB (`nabungah-release.apk`), R8 minified + resource shrunk |
 
 The whole app is deliberately small. Do not add DI graphs, ORMs, navigation libraries, image
 assets, or background job frameworks; they conflict with the product's reason to exist.
@@ -34,30 +34,31 @@ assets, or background job frameworks; they conflict with the product's reason to
 app/src/main/java/com/nabungah/
 ├── MainActivity.kt          Single activity; edge-to-edge; hosts Dashboard
 ├── data/
-│   ├── Models.kt            Wallet, Trx, QuickAction, Goal, Snapshot, AppData
-│   ├── NabungDb.kt          Schema (4 tables + snapshots), WAL, foreign keys
+│   ├── Models.kt            Wallet, Trx, QuickAction, Goal, Snapshot, AppData, audit models
+│   ├── NabungDb.kt          Schema v4 (wallets, transactions, goals, transfers, snapshots)
 │   └── Repo.kt              All SQL reads/writes, validation, JSON backup/restore
 └── ui/
     ├── Theme.kt             Colors, status/semantic colors, NabungTheme
     ├── Fmt.kt               Money/date/fee formatting + parsing (pure, unit-tested)
     ├── MainViewModel.kt     AppData state, IO offloading, write/reload orchestration
-    ├── Dashboard.kt         App shell: bottom tabs, FAB, shared Sheet host
+    ├── Dashboard.kt         App shell: bottom tabs/nav rail, snackbar, FAB, Sheet host
     ├── HomeTab.kt           Balance hero, quick entry, wallets, goals, recent list
-    ├── TransactionsTab.kt   Search + month/type filters, day-grouped transaction log
+    ├── TransactionsTab.kt   Search, wallet/month/type filters, list/calendar, bulk select
     ├── MonthReport.kt       Pure monthly report math (totals, balance, top spending, fee)
     ├── ReviewTab.kt         Live month report, fee, auto/manual snapshots, history
     ├── SettingsTab.kt       Backup/restore, wallet & goal setup, delete tools, about
     ├── Rows.kt              Shared TransactionRow, SnapshotRow, AmountRow
     ├── Components.kt        SectionCard, fields, pickers, empty states, dialog
-    └── Sheets.kt            All 11 bottom-sheet forms, delete flows, clipboard text
+    └── Sheets.kt            All bottom-sheet forms, detail/edit, delete flows, clipboard text
 
 app/src/main/res/
-├── drawable/ic_launcher.xml      Vector launcher icon (no PNG assets)
-├── values/strings.xml            app_name
-└── values/themes.xml             Launch theme (no action bar), background color
+├── drawable/ic_launcher*.xml          Vector launcher + adaptive foreground/monochrome
+├── mipmap-anydpi*/ic_launcher.xml     Legacy and adaptive launcher icons
+├── values/strings.xml                 app_name
+└── values[-night]/themes.xml          Launch theme, light/dark window background
 
-app/src/test/java/com/nabungah/       JVM unit tests (Fmt, copy blocks)
-app/src/androidTest/java/com/nabungah/RepoTest.kt   SQLite/instrumentation tests
+app/src/test/java/com/nabungah/       JVM unit tests (Fmt, copy blocks, reports)
+app/src/androidTest/java/com/nabungah/ Repo, migration and Compose UI tests
 ```
 
 Package root is `com.nabungah` (application ID `com.nabungah`).
@@ -128,7 +129,7 @@ snapshot keeps the fee it was saved with.
 ### Schema (`NabungDb.kt`)
 
 ```sql
-wallet(id PK, name, balance CHECK(balance >= 0), created_at, updated_at)
+wallet(id PK, name, balance >= 0, starting_balance >= 0, created_at, updated_at)
 
 trx(id PK, title, amount CHECK(amount > 0),
     type CHECK(type IN ('income','expense')),
@@ -148,13 +149,18 @@ transfer_log(id PK, amount > 0,
              to_wallet_id REFERENCES wallet(id) ON DELETE SET NULL,
              occurred_at, month)  -- Activity only; never income/expense
 
-month_snapshot(month TEXT PRIMARY KEY, total_balance, total_income,
-               total_expense, fee_percent REAL, fee_expense, updated_at)
+month_snapshot(month TEXT PRIMARY KEY,
+               total_balance >= 0, total_income >= 0, total_expense >= 0,
+               fee_percent REAL CHECK (0..100), fee_expense >= 0, updated_at,
+               source IN ('auto','manual'))
 ```
 
 - Money is **integer Rupiah** everywhere; only `fee_percent` is decimal (`REAL`).
-- Timestamps are epoch millis. Display is device-local time; `month` is derived at insert with
-  `Fmt.monthKey(now)` and indexed.
+- Timestamps are epoch millis. Display is device-local time; `month` is always derived from
+  `occurred_at` with `Fmt.monthKey(...)` and indexed. A date picker can backdate a transaction;
+  v4 migration and the consistency check repair any old month/date mismatch.
+- `wallet.starting_balance` stores the balance before transactions, so
+  `starting_balance + Σ income − Σ expense` can be audited against `balance`.
 - `wallet` deletion keeps transaction history readable via `ON DELETE SET NULL`
   (`Unknown Wallet` fallback in UI).
 - WAL is enabled through `SQLiteOpenHelper.setWriteAheadLoggingEnabled(true)` in `NabungDb.init`.
@@ -169,7 +175,9 @@ All of these run inside `db.beginTransaction()/setTransactionSuccessful()/endTra
 | Operation | Writes in the same transaction |
 |---|---|
 | Add transaction | insert `trx` + adjust wallet balance (expense guarded against negative) |
-| Delete transaction | adjust wallet balance back (clamped at 0) + delete row |
+| Edit transaction | reverse old effect, validate/apply new effect, update row/month |
+| Delete transaction | adjust wallet balance back (clamped at 0) + delete row; undo re-inserts |
+| Bulk delete | reverse each selected row, then delete them in one transaction |
 | Delete all transactions | collect rows, reverse each effect, then delete all rows |
 | Transfer (Tukar Uang) | debit source + credit destination + insert `transfer_log` (balance read from DB at submit) |
 | Delete all wallets / quick actions / snapshots / data | one transaction around the bulk delete |
@@ -191,8 +199,8 @@ the list shown in the form.
    Finished months become `auto` snapshots when the calendar month changes; saving an edit marks a
    month `manual` and auto-sync never overwrites it. Deleting snapshots never touches
    transactions/wallets, and vice versa.
-6. **No editing of wallets or transactions** and no rename; only add/delete (goals are the one
-   editable entity).
+6. **Wallets cannot be edited or renamed**, but transactions can be edited: the old effect is
+   reversed and the new type/amount/wallet/date is applied atomically. Goals remain editable.
 7. **"Current month" for Monthly Overview comes from the device clock**, independent of the
    transaction filter.
 
@@ -207,7 +215,7 @@ Storage Access Framework — no storage permissions and no external dependencies
   `nabungah-backup-yyyyMMdd-HHmm.json` (`Fmt.backupFileName`). `Repo.exportJson()` serializes every
   table with stable ids and a header:
   ```json
-  { "app": "nabungah", "version": 3, "exportedAt": 0,
+  { "app": "nabungah", "version": 4, "exportedAt": 0,
     "wallets": [...], "transactions": [...], "quickActions": [...],
     "goals": [...], "snapshots": [{ ..., "source": "auto" }],
     "transfers": [...] }
@@ -215,9 +223,10 @@ Storage Access Framework — no storage permissions and no external dependencies
 - **Import** is destructive and always confirmed first: it **replaces** all local data rather than
   merging. `Repo.importJson()` parses and validates the whole document *before* opening the write
   transaction, so a malformed file cannot wipe the database. Header (`app`), `version` (currently
-  `3`; `1` and `2` are still accepted, with missing transfers ignored and v1 snapshots treated as
-  manual) and every row are validated;
-  DB constraints are the final guard and roll the transaction back.
+  `4`; `1`–`3` are still accepted, with starting balances derived and missing transfers ignored)
+  and every row are validated, including duplicate ids, types, months, wallet references and
+  non-negative snapshot numbers. Before replacing anything, the UI shows a preview of the file's
+  record counts; DB constraints are the final guard and roll the transaction back.
 - Wallet ids are preserved so transaction links survive a round trip. After restore the view model
   reloads all state.
 - File I/O happens on `Dispatchers.IO` in `MainViewModel.exportBackup` / `importBackup`; the UI
@@ -269,9 +278,9 @@ Dashboard (Scaffold)
 └── content (by tab)
     ├── HomeTab       header, hero balance (month in/out), wide wallet cards, Add/Transfer/Goal,
     │                 large quick-action cards, savings goal cards, last 5 transactions
-    ├── TransactionsTab  search field, List/Calendar toggle, type filter (income/expense/transfer),
-    │                 day-grouped rows or a Monday-first month grid with per-day activity dots,
-    │                 selected-day list, "Show more" (20 at a time)
+    ├── TransactionsTab  search, List/Calendar toggle, wallet/month/type filters, "Bulan ini",
+    │                 day-grouped rows or calendar dots, selected-day list, bulk select/delete,
+    │                 row opens a read-only detail sheet with Edit/Delete
     ├── ReviewTab     month stepper (defaults to current month), stat dashboard (income, expense,
     │                 net, average, count, fee, month-over-month trend, biggest spending), fee card,
     │                 auto/manual status, manual edit sheet, saved-months history
@@ -303,10 +312,12 @@ Dashboard (Scaffold)
 - **Insets:** `MainActivity` calls `enableEdgeToEdge()` and the dashboard applies
   `windowInsetsPadding(WindowInsets.safeDrawing)`. Sheets add `imePadding()` +
   `navigationBarsPadding()` in `SheetColumn`.
-- **Theme:** light-only `lightColorScheme`. Semantic colors (`IncomeGreen`, `ExpenseRed`,
-  `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`) plus the hero gradient colors
-  (`HeroTop`/`HeroBottom`, `OnHeroMuted`, `HeroIncome`, `HeroExpense`, `SoftTeal`, tinted
-  backgrounds) are declared in `Theme.kt`; reuse them rather than hardcoding new colors.
+- **Theme:** follows the system light/dark setting (`isSystemInDarkTheme()`). Semantic colors
+  (`IncomeGreen`, `ExpenseRed`, `StatusOrange`, `Muted`, `CardBorder`, `CanvasBg`, tints) are
+  composable getters in `Theme.kt`; `appCard()` uses `MaterialTheme.colorScheme.surface`. Reuse
+  them rather than hardcoding white or a new color.
+- **Layout:** below 600 dp the shell uses a bottom bar; above it, a `NavigationRail`. Content
+  remains one readable column.
 - **Components:** `SectionCard`, `CardAction`, `OutlinedActionButton`, `StatTile`, `EmptyState`,
   `LabeledTextField`, `MoneyField`, `PickerField`, `FormError`, `SelectableRow`, `ConfirmDialog`,
   `CopyButton`, `EmptyText` cover the recurring patterns. Prefer extending one of these over adding
@@ -352,8 +363,8 @@ merge the two.
 ### What not to add
 
 Accounts/auth, sync, network calls, telemetry, charts, budgets, recurring transactions, CSV
-export, wallet/transaction editing (without an explicit spec decision), goal↔wallet
-auto-deduction, or letting `transfer_log` feed income/expense totals.
+export, wallet editing, goal↔wallet auto-deduction, or letting `transfer_log` feed
+income/expense totals. Transaction editing is allowed and must stay atomic.
 
 ---
 
@@ -480,7 +491,17 @@ that rewrite is explicitly out of scope for this rebuild.
 
 ---
 
-## 11. Known limitations / future work
+## 11. Release history
+
+| Version | Notes |
+|---|---|
+| 1.4 (`versionCode` 4) | Schema v4 (`starting_balance`, checks), transaction edit/backdate/detail, bulk delete, undo snackbar, wallet filter, backup preview/info, consistency audit, dark theme, adaptive icon, nav rail, Compose UI tests. |
+| 1.3 (`versionCode` 3) | Transfer log, saved global fee, Pengaturan redesign, calendar Activity, report stat dashboard, copy blocks, Windows build guide. |
+| 1.2 (`versionCode` 2) | Live monthly report, automatic/manual snapshots (schema v2), load error state. |
+
+---
+
+## 12. Known limitations / future work
 
 - Backup is whole-app replace-only (no merge, no partial restore) and has no automatic/scheduled
   export or file encryption. It covers the six data tables, not the device's Android auto-backup.
@@ -489,9 +510,10 @@ that rewrite is explicitly out of scope for this rebuild.
   later sync includes that month). The current month is never auto-saved while it is running.
 - The month-end balance in a report is reconstructed by undoing later transactions; deleting a
   wallet (which removes balance without leaving a transaction) can skew historical balances.
-- No UI/instrumentation tests for composables — behavior is covered at the `Repo` and formatting
-  layers plus manual emulator smoke tests.
+- Compose UI tests cover tab navigation, adding a transaction, and the wallet filter. They compile
+  and are ready for an emulator/device; they have not been run on this machine (`adb devices` empty).
 - Cold-start timing from the software-rendered emulator is indicative only; re-measure on a
   physical low-end device before treating the <1 s target as met. The APK already embeds the
   Compose baseline profile (`assets/dexopt/baseline.prof`).
-- Light theme only; no dark theme, per "out of scope".
+- Dark theme follows the system setting; themed icons require Android 13+. Tablet layout is a
+  navigation rail only — Home/Activity two-column layouts are still future work.

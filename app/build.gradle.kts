@@ -1,3 +1,4 @@
+import com.android.build.api.variant.impl.VariantOutputImpl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
 import java.util.Properties
@@ -21,8 +22,8 @@ android {
         applicationId = "com.nabungah"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.3"
+        versionCode = 4
+        versionName = "1.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -62,15 +63,6 @@ android {
         }
     }
 
-    // Name artifacts after the app, not the module: nabungah-debug.apk / nabungah-release.apk.
-    applicationVariants.all {
-        val variantName = name
-        outputs.all {
-            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "nabungah-$variantName.apk"
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -83,6 +75,17 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+}
+
+// Name artifacts after the app, not the module: nabungah-debug.apk / nabungah-release.apk.
+// androidComponents replaces the deprecated applicationVariants API. AGP 8.9 exposes the
+// filename only on the implementation type; AGP 9.3 adds it to the public VariantOutput.
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            (output as VariantOutputImpl).outputFileName.set("nabungah-${variant.name}.apk")
+        }
     }
 }
 
@@ -108,4 +111,7 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

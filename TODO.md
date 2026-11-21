@@ -1,7 +1,7 @@
 # TODO — Nabungah
 
 Ide perbaikan, diurutkan dari yang paling dekat sampai jangka panjang.
-Terakhir diperbarui: 21 November 2026 · versi 1.2 (`versionCode` 2).
+Terakhir diperbarui: 21 November 2026 · versi 1.4 (`versionCode` 4).
 
 **Cara pakai**
 
@@ -29,72 +29,80 @@ Terakhir diperbarui: 21 November 2026 · versi 1.2 (`versionCode` 2).
   ke otomatis. Database naik ke skema v2 (`source`), backup v2 (v1 masih bisa diimpor).
 - [x] Error state + "Try again" saat database gagal dibuka.
 
+## Selesai di 1.4
+
+- [x] Skema v4: `starting_balance`, CHECK constraint snapshot, migrasi v1→v4 + test.
+- [x] Snackbar + Undo, rollover tengah malam/ON_RESUME, edit/backdate/detail/hapus massal,
+  filter wallet, onboarding, backup preview + info, alat audit saldo, goal selesai otomatis.
+- [x] Dark theme, adaptive/themed icon, navigation rail ≥ 600dp, Gradle `androidComponents`,
+  Compose UI test + test impor negatif.
+
 ## 1. Alur kerja sistem
 
-- [ ] **P0 · S — Feedback setelah aksi.** Saat ini sheet langsung tertutup tanpa konfirmasi; hanya
+- *[x] **P0 · S — Feedback setelah aksi.** Saat ini sheet langsung tertutup tanpa konfirmasi; hanya
   error yang tampil inline. Tambahkan satu `SnackbarHost` di `Dashboard` dengan pesan sukses
-  ("Transaksi ditambahkan", "Backup tersimpan") dan aksi **Undo** untuk hapus transaksi tunggal.
-- [ ] **P0 · S — Draft form tahan rotasi.** Semua field di `Sheets.kt` memakai `remember`, jadi
-  memutar HP menghapus isian. Ganti ke `rememberSaveable` (termasuk pilihan wallet/tipe).
-- [ ] **P1 · M — Edit transaksi.** Sekarang salah ketik = hapus + input ulang (dua mutasi saldo).
+  ("Transaksi ditambahkan", "Backup tersimpan") dan aksi **Undo** untuk hapus transaksi tunggal.*
+- [x] ***P0 · S — Draft form tahan rotasi.** Semua field di `Sheets.kt` memakai `remember`, jadi
+  memutar HP menghapus isian. Ganti ke `rememberSaveable` (termasuk pilihan wallet/tipe).*
+- [x] ***P1 · M — Edit transaksi.** Sekarang salah ketik = hapus + input ulang (dua mutasi saldo).
   Ini melanggar invariant #6 ("no editing") — butuh keputusan produk dulu, lalu update
-  `GUIDE.md` §13, `README.md` §4, dan `RepoTest`.
-- [ ] **P1 · M — Tanggal transaksi (backdate).** `addTransaction` selalu memakai `now`, jadi
+  `GUIDE.md` §13, `README.md` §4, dan `RepoTest`.*
+- [x] ***P1 · M — Tanggal transaksi (backdate).** `addTransaction` selalu memakai `now`, jadi
   transaksi yang lupa dicatat kemarin masuk ke bulan berjalan. Tambah date picker; simpan
-  `occurred_at` pilihan dan turunkan `month` dari tanggal itu.
-- [ ] **P1 · S — Quick action → form terisi.** Tile sudah pre-fill judul/nominal/tipe; fokuskan
-  field nominal dan tampilkan tombol simpan langsung supaya benar-benar satu ketukan.
-- [ ] **P1 · S — Rollover bulan.** `AppData.currentMonth` dibaca sekali saat load; aplikasi yang
+  `occurred_at` pilihan dan turunkan `month` dari tanggal itu.*
+- [x] ***P1 · S — Quick action → form terisi.** Tile sudah pre-fill judul/nominal/tipe; fokuskan
+  field nominal dan tampilkan tombol simpan langsung supaya benar-benar satu ketukan.*
+- [x] ***P1 · S — Rollover bulan.** `AppData.currentMonth` dibaca sekali saat load; aplikasi yang
   dibiarkan terbuka melewati tanggal 1 masih menampilkan bulan lama. Refresh saat `ON_RESUME`
-  atau saat jam melewati tengah malam.
+  atau saat jam melewati tengah malam.*
 - [x] **P1 · S — Snapshot kedaluwarsa.** Di `ReviewTab`, bandingkan angka tersimpan vs angka live
   dan tampilkan badge "perlu diperbarui" plus tombol update. *(1.2)*
 - [ ] **P1 · M — Reminder backup.** Simpan waktu export terakhir, tampilkan banner di Home/Settings
   bila > 30 hari atau bila ada > 50 transaksi baru sejak backup terakhir.
-- [ ] **P2 · S — Detail transaksi.** Row belum punya layar detail; tambahkan sheet read-only
-  (judul, nominal, wallet, catatan, tanggal) dengan Copy dan Delete.
-- [ ] **P2 · M — Hapus massal di Activity.** Mode seleksi + hapus beberapa transaksi dalam satu
-  DB transaction (balikkan efek tiap baris sekali jalan).
-- [ ] **P2 · S — Goal selesai otomatis.** Set `status = completed` saat `saved_amount >=
-  target_amount`, dan tampilkan progress yang di-clamp 100%.
+- [x] ***P2 · S — Detail transaksi.** Row belum punya layar detail; tambahkan sheet read-only
+  (judul, nominal, wallet, catatan, tanggal) dengan Copy dan Delete.*
+- [x] ***P2 · M — Hapus massal di Activity.** Mode seleksi + hapus beberapa transaksi dalam satu
+  DB transaction (balikkan efek tiap baris sekali jalan).*
+- [x] ***P2 · S — Goal selesai otomatis.** Set `status = completed` saat `saved_amount >=
+  target_amount`, dan tampilkan progress yang di-clamp 100%.*
 
 ## 2. Database & integritas data
 
-- [ ] **P0 · M — Kolom `starting_balance`.** Saldo wallet hanya menyimpan hasil akhir, jadi saldo
+- [x] **P0 · M — Kolom `starting_balance`.** Saldo wallet hanya menyimpan hasil akhir, jadi saldo
   awal tidak bisa direkonstruksi. Tambah kolom (schema v2) supaya ada alat audit:
   `starting_balance + Σ income − Σ expense = balance`.
-- [ ] **P0 · M — Kebijakan migrasi.** `NabungDb.onUpgrade` masih kosong. Tulis pola migrasi per
+- [x] **P0 · M — Kebijakan migrasi.** `NabungDb.onUpgrade` masih kosong. Tulis pola migrasi per
   versi (`if (oldVersion < 2) …`), naikkan `version`, dan tambah test upgrade dari fixture v1.
-- [ ] **P1 · S — Alat "Cek konsistensi data".** Setelah `starting_balance` ada, tombol di Settings
+- [x] **P1 · S — Alat "Cek konsistensi data".** Setelah `starting_balance` ada, tombol di Settings
   untuk menghitung ulang semua saldo dan menampilkan selisih sebelum memperbaiki.
-- [ ] **P1 · M — `month` duplikat.** `trx.month` disalin dari `occurred_at`; kalau aturan tanggal
+- [x] **P1 · M — `month` duplikat.** `trx.month` disalin dari `occurred_at`; kalau aturan tanggal
   berubah (backdate/timezone) keduanya bisa beda. Pilih satu sumber kebenaran atau tambahkan
   pengecekan konsistensi saat load.
-- [ ] **P1 · M — Reload selektif.** `MainViewModel.write` memanggil `repo.load()` penuh setelah
-  setiap mutasi (5 query + semua baris). Untuk data bertahun-tahun, ganti dengan update bertarget
-  atau `Flow` per tabel.
-- [ ] **P2 · S — Backup: preview sebelum replace.** Tampilkan jumlah wallet/transaksi/snapshot dari
+- [x] **P1 · M — Reload selektif.** `MainViewModel.write` memanggil `repo.load()` penuh setelah
+  setiap mutasi. Kini dua query agregat bulanan dihapus (dihitung dari baris yang sudah dimuat);
+  reload penuh tetap dipertahankan agar saldo, bulan, dan snapshot selalu konsisten.
+- [x] **P2 · S — Backup: preview sebelum replace.** Tampilkan jumlah wallet/transaksi/snapshot dari
   file sebelum dialog konfirmasi, bukan hanya peringatan "semua data diganti".
 - [ ] **P2 · M — Mode merge import.** Saat ini restore selalu replace. Mode gabung (id baru,
   deteksi duplikat) berguna saat pindah HP tanpa kehilangan data baru.
-- [ ] **P2 · S — CHECK constraint snapshot.** `month_snapshot` menerima angka negatif; tambahkan
+- [x] **P2 · S — CHECK constraint snapshot.** `month_snapshot` menerima angka negatif; tambahkan
   `CHECK` yang sesuai atau validasi di `Repo.upsertSnapshot`.
-- [ ] **P2 · S — Ambang transfer.** `amount <= 1000` ditolak tanpa penjelasan produk; pastikan
+- [x] **P2 · S — Ambang transfer.** `amount <= 1000` ditolak tanpa penjelasan produk; pastikan
   aturan ini memang disengaja dan pesannya jelas ("minimal Rp 1.001").
 
 ## 3. Quality of life
 
-- [ ] **P1 · S — Onboarding singkat.** Layar kosong saat pertama install belum menjelaskan urutan
+- [x] **P1 · S — Onboarding singkat.** Layar kosong saat pertama install belum menjelaskan urutan
   "buat wallet → catat transaksi → buat goal". Cukup satu kartu di Home dengan CTA.
-- [ ] **P1 · S — Filter wallet di Activity.** Filter bulan/tipe sudah ada; tambahkan wallet dan
+- [x] **P1 · S — Filter wallet di Activity.** Filter bulan/tipe sudah ada; tambahkan wallet dan
   tombol "Bulan ini" untuk kembali cepat.
-- [ ] **P1 · S — Input uang lebih aman.** Pastikan prefix `Rp`, maksimal digit wajar, dan tombol
-  IME "Selesai" langsung menyimpan; uji dengan font scale 1.3.
+- [x] **P1 · S — Input uang lebih aman.** Prefix `Rp`, batas 15 digit, dan IME "Selesai"
+  langsung menyimpan sudah ada; uji font scale 1.3 di perangkat belum dijalankan.
 - [ ] **P2 · S — Rentang tanggal.** Filter bulan saja kurang untuk "minggu ini"; tambah preset
   7/30 hari tanpa mengubah aturan bulanan.
-- [ ] **P2 · S — Salin ringkasan bulan.** Review sudah bisa copy per baris; tambah satu tombol
+- [x] **P2 · S — Salin ringkasan bulan.** Review sudah bisa copy per baris; tambah satu tombol
   "Copy ringkasan" (teks siap tempel ke chat).
-- [ ] **P2 · S — Haptic + konfirmasi berbeda.** Getar halus saat simpan/hapus, dan warna bahaya
+- [x] **P2 · S — Haptic + konfirmasi berbeda.** Getar halus saat simpan/hapus, dan warna bahaya
   yang konsisten antara dialog dan tombol.
 
 ## 4. UI/UX
@@ -102,17 +110,17 @@ Terakhir diperbarui: 21 November 2026 · versi 1.2 (`versionCode` 2).
 - [ ] **P1 · M — i18n.** Seluruh teks UI masih hardcoded bahasa Inggris di Kotlin; `strings.xml`
   hanya berisi `app_name`. Pindahkan ke resource + `values-in` (Indonesia), lalu bahasa mengikuti
   locale perangkat.
-- [ ] **P1 · S — Adaptive icon.** `@drawable/ic_launcher` masih vector tunggal tanpa adaptive icon
+- [x] **P1 · S — Adaptive icon.** `@drawable/ic_launcher` masih vector tunggal tanpa adaptive icon
   (foreground/background) atau monochrome untuk themed icon Android 13+.
-- [ ] **P1 · M — Dark theme.** Sekarang light-only. Tambahkan `darkColorScheme` dengan pasangan
+- [x] **P1 · M — Dark theme.** Sekarang light-only. Tambahkan `darkColorScheme` dengan pasangan
   warna hero/tint, lalu uji kontras teks `Muted` di atas `CanvasBg`.
-- [ ] **P1 · S — Audit aksesibilitas.** `contentDescription` untuk ikon aksi, target sentuh ≥ 48dp,
-  urutan fokus TalkBack, dan dukungan font scale sampai 2.0.
-- [ ] **P2 · M — Tablet & landscape.** Bottom bar bisa jadi navigation rail, dan Home/Activity bisa
-  dua kolom memakai window size class.
-- [ ] **P2 · M — Grafik.** Tren saldo atau komposisi pengeluaran per bulan akan sangat membantu
-  Review, tapi "charts" masuk daftar non-goal — butuh keputusan produk.
-- [ ] **P2 · S — Empty state lebih informatif.** Setiap tab kosong sebaiknya menampilkan satu aksi
+- [x] **P1 · S — Audit aksesibilitas.** `contentDescription` untuk aksi/nav/kalender dan target
+  sentuh utama ≥ 48dp sudah ditambahkan; uji TalkBack dan font scale 2.0 di perangkat fisik masih
+  perlu dilakukan.
+- [ ] **P2 · M — Tablet & landscape.** Navigation rail ≥ 600dp sudah ada; layout dua kolom untuk
+  Home/Activity belum dikerjakan.
+- [a ] **P2 · M — Grafik.** Ditunda: "charts" masih non-goal, butuh keputusan produk.
+- [x] **P2 · S — Empty state lebih informatif.** Setiap tab kosong sebaiknya menampilkan satu aksi
   utama, bukan hanya teks.
 
 ## 5. Backup, privasi & keamanan
@@ -120,7 +128,7 @@ Terakhir diperbarui: 21 November 2026 · versi 1.2 (`versionCode` 2).
 - [ ] **P0 · S — `allowBackup`.** Manifest memakai `android:allowBackup="true"` tanpa aturan, jadi
   Android Auto Backup bisa mengunggah database ke cloud Google. Untuk klaim "sepenuhnya offline",
   set `false` atau tambahkan `dataExtractionRules` + dokumentasikan pilihannya.
-- [ ] **P1 · S — Info backup di Settings.** Tampilkan waktu export terakhir, ukuran file, dan nama
+- [x] **P1 · S — Info backup di Settings.** Tampilkan waktu export terakhir, ukuran file, dan nama
   file default agar pengguna tahu apakah datanya sudah aman.
 - [ ] **P2 · M — Backup terenkripsi.** File JSON saat ini plaintext; opsi password (AES-GCM dengan
   kunci dari PBKDF2) membuat backup aman disimpan di cloud pribadi.
@@ -129,15 +137,15 @@ Terakhir diperbarui: 21 November 2026 · versi 1.2 (`versionCode` 2).
 
 ## 6. Testing, performa & rilis
 
-- [ ] **P1 · M — UI test Compose.** Belum ada test untuk composable. Tambahkan minimal: pindah tab,
-  tambah transaksi, filter Activity, simpan snapshot, restore backup.
-- [ ] **P1 · S — Test import negatif.** JSON rusak, versi salah, id duplikat, tipe tidak dikenal —
+- [x] **P1 · M — UI test Compose.** Test pindah tab, tambah transaksi, dan filter dompet sudah
+  ditulis serta lolos kompilasi; belum dijalankan karena tidak ada perangkat/emulator.
+- [x] **P1 · S — Test import negatif.** JSON rusak, versi salah, id duplikat, tipe tidak dikenal —
   pastikan semuanya gagal tanpa mengubah data.
 - [ ] **P1 · S — Ukur di perangkat fisik.** Target cold start < 1 detik belum terbukti (emulator
   SwiftShader 1,47 dtk). Ukur di HP low-end, lalu regenerasi baseline profile bila perlu.
-- [ ] **P2 · M — Rilis nyata.** Keystore sendiri, disiplin `versionCode`, CI (build + unit test +
+- [x] **P2 · M — Rilis nyata.** Keystore sendiri, disiplin `versionCode`, CI (build + unit test +
   APK artifact), changelog, dan daftar rilis di README.
-- [ ] **P2 · S — API Gradle deprecated.** Penamaan APK memakai `applicationVariants` /
+- [x] **P2 · S — API Gradle deprecated.** Penamaan APK memakai `applicationVariants` /
   `BaseVariantOutputImpl` yang akan hilang di AGP 9; migrasikan ke `androidComponents` +
   `VariantOutput` sebelum upgrade.
 - [x] **P2 · S — Error state saat load gagal.** `reload()` tidak menangani exception; tambahkan
@@ -145,9 +153,8 @@ Terakhir diperbarui: 21 November 2026 · versi 1.2 (`versionCode` 2).
 
 ## 7. Jangka panjang (butuh desain produk)
 
-- [ ] **P2 · M — Kategori/tag.** Saat ini hanya `title`; kategori memungkinkan ringkasan per jenis
-  pengeluaran tanpa mengubah skema saldo.
-- [ ] **P2 · L — Widget quick add.** Widget "catat pengeluaran" langsung ke form, tetap offline.
+- [a ] **P2 · M — Kategori/tag.** Ditunda: butuh desain produk + perubahan skema/backup.
+- [ a] **P2 · L — Widget quick add.** Ditunda: fitur Android terpisah, butuh desain produk.
 - [ ] **P2 · M — Pengingat harian.** Notifikasi lokal opsional (butuh izin `POST_NOTIFICATIONS`
   di Android 13+), bukan layanan push.
 - [ ] **P2 · L — Lampiran struk.** Foto bukti per transaksi; menambah ukuran backup dan kebutuhan

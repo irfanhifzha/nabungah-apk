@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -42,13 +43,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** The app's standard card surface: white, hairline border, rounded corners. */
-fun Modifier.appCard(radius: Dp = 16.dp, color: Color = Color.White): Modifier =
+/** The app's standard card surface: theme surface, hairline border, rounded corners. */
+@Composable
+fun Modifier.appCard(
+    radius: Dp = 16.dp,
+    color: Color = MaterialTheme.colorScheme.surface,
+): Modifier =
     clip(RoundedCornerShape(radius))
         .background(color)
         .border(1.dp, CardBorder, RoundedCornerShape(radius))
@@ -194,14 +203,25 @@ fun MoneyField(
     digits: String,
     onDigitsChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onDone: (() -> Unit)? = null,
 ) {
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = Fmt.groupDigits(digits),
         onValueChange = { onDigitsChange(it.filter { ch -> ch.isDigit() }.take(15)) },
         label = { Text(label) },
         prefix = { Text("Rp ") },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = if (onDone != null) ImeAction.Done else ImeAction.Default,
+        ),
+        keyboardActions = KeyboardActions(
+            onDone = {
+                focus.clearFocus()
+                onDone?.invoke()
+            },
+        ),
         modifier = modifier.fillMaxWidth(),
     )
 }
@@ -315,7 +335,6 @@ fun StatTile(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = color,
-            maxLines = 1,
         )
     }
 }
@@ -357,11 +376,12 @@ fun EmptyState(
 fun ConfirmDialog(
     title: String,
     message: String,
-    confirmLabel: String = "Delete",
+    confirmLabel: String = "Hapus",
     destructive: Boolean = true,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -373,6 +393,10 @@ fun ConfirmDialog(
                 else MaterialTheme.colorScheme.primary,
                 compact = true,
                 onClick = {
+                    haptics.performHapticFeedback(
+                        if (destructive) HapticFeedbackType.LongPress
+                        else HapticFeedbackType.Confirm,
+                    )
                     onDismiss()
                     onConfirm()
                 },

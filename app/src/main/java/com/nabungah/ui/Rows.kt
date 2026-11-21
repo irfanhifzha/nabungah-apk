@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,14 +53,23 @@ fun AmountRow(label: String, amount: Long, color: Color, prefix: String = "", mo
 }
 
 @Composable
-fun TransactionRow(trx: Trx, walletName: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .appCard()
-            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp),
-    ) {
-        Row {
+fun TransactionRow(
+    trx: Trx,
+    walletName: String,
+    onClick: (() -> Unit)? = null,
+    selectionActive: Boolean = false,
+    selected: Boolean = false,
+) {
+    val card = Modifier
+        .fillMaxWidth()
+        .appCard()
+        .then(if (onClick != null) Modifier.pressableCard(onClick = onClick) else Modifier)
+        .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp)
+    Column(modifier = card) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selectionActive) {
+                Checkbox(checked = selected, onCheckedChange = { onClick?.invoke() })
+            }
             val accent = if (trx.type == "income") IncomeGreen else ExpenseRed
             Box(
                 modifier = Modifier
@@ -110,8 +120,10 @@ fun TransactionRow(trx: Trx, walletName: String) {
                 maxLines = 1,
             )
         }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            CopyButton(text = trxCopyText(trx, walletName))
+        if (!selectionActive) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                CopyButton(text = trxCopyText(trx, walletName))
+            }
         }
     }
 }

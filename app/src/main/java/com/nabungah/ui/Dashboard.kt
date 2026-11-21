@@ -2,8 +2,10 @@ package com.nabungah.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -22,10 +24,17 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,10 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
+import com.nabungah.data.Trx
+import kotlinx.coroutines.delay
 
 sealed interface Sheet {
     data object AddWallet : Sheet
@@ -47,6 +59,8 @@ sealed interface Sheet {
     data object AddGoal : Sheet
     data class EditGoal(val goal: Goal) : Sheet
     data object Transfer : Sheet
+    data class TransactionDetail(val trx: Trx) : Sheet
+    data class EditTransaction(val trx: Trx) : Sheet
     data class EditReport(
         val month: String,
         val income: Long,
@@ -111,42 +125,78 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
 
     val data = vm.data
     val tab = Tab.entries.firstOrNull { it.key == tabKey } ?: Tab.Home
+    val snackbar = remember { SnackbarHostState() }
+    // Also catches the midnight rollover while the app stays in the foreground.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            vm.checkMonthRollover()
+        }
+    }
+    LaunchedEffect(vm.event?.id) {
+        val event = vm.event ?: return@LaunchedEffect
+        val result = snackbar.showSnackbar(
+            message = event.message,
+            actionLabel = event.undoTransaction?.let { "Urungkan" },
+            withDismissAction = event.undoTransaction == null,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            event.undoTransaction?.let { vm.restoreTransaction(it) }
+        }
+        vm.consumeEvent(event.id)
+    }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = CanvasBg,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = { AppBottomBar(selected = tab, onSelect = { tabKey = it.key }) },
-        floatingActionButton = {
-            if (tab == Tab.Home || tab == Tab.Transactions) {
-                ExtendedFloatingActionButton(
-                    onClick = { sheet = Sheet.NewTransaction() },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Tambah") },
-                )
-            }
-        },
-    ) { inner ->
-        Box(modifier = Modifier.fillMaxSize().padding(inner)) {
-            when (tab) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val wide = maxWidth >= 600.dp
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = CanvasBg,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            snackbarHost = { SnackbarHost(snackbar) },
+            bottomBar = {
+                if (!wide) AppBottomBar(selected = tab, onSelect = { tabKey = it.key })
+            },
+            floatingActionButton = {
+                if (tab == Tab.Home || tab == Tab.Transactions) {
+                    ExtendedFloatingActionButton(
+                        onClick = { sheet = Sheet.NewTransaction() },
+                        modifier = Modifier.testTag("add-transaction"),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        icon = { Icon(Icons.Default.Add, contentDescription = "Tambah transaksi") },
+                        text = { Text("Tambah") },
+                    )
+                }
+            },
+        ) { inner ->
+            Row(modifier = Modifier.fillMaxSize().padding(inner)) {
+                if (wide) {
+                    AppNavRail(selected = tab, onSelect = { tabKey = it.key })
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    when (tab) {
                 Tab.Home -> HomeTab(
                     data = data,
                     onSheet = { sheet = it },
                     onSeeAll = { tabKey = Tab.Transactions.key },
                 )
-                Tab.Transactions -> TransactionsTab(data = data)
+                Tab.Transactions -> TransactionsTab(
+                    vm = vm,
+                    data = data,
+                    onSheet = { sheet = it },
+                )
                 Tab.Review -> ReviewTab(
                     vm = vm,
                     data = data,
                     onSheet = { sheet = it },
                 )
-                Tab.Settings -> SettingsTab(
-                    vm = vm,
-                    data = data,
-                    onSheet = { sheet = it },
-                )
+                        Tab.Settings -> SettingsTab(
+                            vm = vm,
+                            data = data,
+                            onSheet = { sheet = it },
+                        )
+                    }
+                }
             }
         }
     }
@@ -156,7 +206,7 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
         ModalBottomSheet(
             onDismissRequest = { sheet = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
         ) {
             when (current) {
                 is Sheet.AddWallet -> AddWalletSheet(vm) { sheet = null }
@@ -170,6 +220,19 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
                 is Sheet.AddGoal -> AddGoalSheet(vm) { sheet = null }
                 is Sheet.EditGoal -> EditGoalSheet(vm, current.goal) { sheet = null }
                 is Sheet.Transfer -> TransferSheet(vm, data.wallets) { sheet = null }
+                is Sheet.TransactionDetail -> TransactionDetailSheet(
+                    vm = vm,
+                    trx = current.trx,
+                    walletName = data.walletNames[current.trx.walletId] ?: "Dompet tidak dikenal",
+                    onEdit = { sheet = Sheet.EditTransaction(current.trx) },
+                    onClose = { sheet = null },
+                )
+                is Sheet.EditTransaction -> EditTransactionSheet(
+                    vm = vm,
+                    trx = current.trx,
+                    wallets = data.wallets,
+                    onClose = { sheet = null },
+                )
                 is Sheet.EditReport -> EditReportSheet(
                     vm = vm,
                     month = current.month,
@@ -195,16 +258,40 @@ fun Dashboard(vm: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun AppNavRail(selected: Tab, onSelect: (Tab) -> Unit) {
+    NavigationRail(
+        containerColor = MaterialTheme.colorScheme.surface,
+        header = { Text("N", fontWeight = FontWeight.Bold) },
+    ) {
+        Tab.entries.forEach { tab ->
+            NavigationRailItem(
+                selected = tab == selected,
+                onClick = { onSelect(tab) },
+                icon = { Icon(tab.icon, contentDescription = tab.label) },
+                label = { Text(tab.label) },
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = SoftTeal,
+                    unselectedIconColor = Muted,
+                    unselectedTextColor = Muted,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
 private fun AppBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
     NavigationBar(
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
     ) {
         Tab.entries.forEach { tab ->
             NavigationBarItem(
                 selected = tab == selected,
                 onClick = { onSelect(tab) },
-                icon = { Icon(tab.icon, contentDescription = null) },
+                icon = { Icon(tab.icon, contentDescription = tab.label) },
                 label = { Text(tab.label) },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = MaterialTheme.colorScheme.primary,

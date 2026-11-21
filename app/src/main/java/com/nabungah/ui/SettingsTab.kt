@@ -1,5 +1,6 @@
 package com.nabungah.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -30,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +43,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nabungah.BuildConfig
 import com.nabungah.data.AppData
+import com.nabungah.data.BackupPreview
+import com.nabungah.data.ConsistencyReport
 import com.nabungah.data.Goal
 import com.nabungah.data.QuickAction
 import com.nabungah.data.Wallet
@@ -48,9 +52,20 @@ import com.nabungah.data.Wallet
 /** Settings: data summary, backup, fee, setup, and all destructive tools. */
 @Composable
 fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
-    var backupMessage by remember { mutableStateOf<String?>(null) }
-    var backupFailed by remember { mutableStateOf(false) }
-    var confirmRestore by remember { mutableStateOf(false) }
+    var backupMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var backupFailed by rememberSaveable { mutableStateOf(false) }
+    var pendingUri by remember { mutableStateOf<Uri?>(null) }
+    var preview by remember { mutableStateOf<BackupPreview?>(null) }
+    var audit by remember { mutableStateOf<ConsistencyReport?>(null) }
+    var auditError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun runAudit() {
+        auditError = null
+        vm.auditConsistency(
+            onResult = { audit = it },
+            onError = { auditError = it },
+        )
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -67,10 +82,10 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            vm.importBackup(
+            vm.previewBackup(
                 uri = uri,
+                onResult = { pendingUri = uri; preview = it },
                 onError = { backupMessage = it; backupFailed = true },
-                onDone = { backupMessage = "Backup berhasil dipulihkan."; backupFailed = false },
             )
         }
     }
@@ -127,11 +142,27 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                         modifier = Modifier.weight(1f).height(46.dp),
                     ) { Text("Ekspor backup") }
                     OutlinedButton(
-                        onClick = { confirmRestore = true },
+                        onClick = {
+                            importLauncher.launch(
+                                arrayOf("application/json", "text/plain", "application/octet-stream"),
+                            )
+                        },
                         modifier = Modifier.weight(1f).height(46.dp),
                         border = BorderStroke(1.dp, CardBorder),
                     ) { Text("Impor") }
                 }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = if (data.lastBackupAt == 0L) {
+                        "Belum pernah mengekspor backup dari perangkat ini."
+                    } else {
+                        "Terakhir diekspor ${Fmt.timestamp(data.lastBackupAt)} · " +
+                            "${formatBytes(data.lastBackupBytes)} · " +
+                            Fmt.backupFileName(data.lastBackupAt)
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                )
                 if (backupMessage != null) {
                     Spacer(Modifier.height(10.dp))
                     Text(
@@ -251,6 +282,64 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
+            SectionCard(
+                title = "Kesehatan data",
+                actions = { CardAction("Periksa", { runAudit() }) },
+            ) {
+                Text(
+                    text = "Membandingkan saldo tersimpan dengan saldo awal + seluruh transaksi. " +
+                        "Pemeriksaan tidak mengubah apa pun.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                audit?.let { report ->
+                    Spacer(Modifier.height(10.dp))
+                    if (!report.hasIssues) {
+                        Text(
+                            text = "Semua saldo cocok. Tidak ada data yang perlu diperbaiki.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = IncomeGreen,
+                        )
+                    } else {
+                        Text(
+                            text = "${report.walletDrift.size} saldo menyimpang · " +
+                                "${report.monthMismatches} bulan transaksi tidak cocok · " +
+                                "${report.snapshotIssues} snapshot tidak valid",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = StatusOrange,
+                        )
+                        report.walletDrift.forEach { drift ->
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "${drift.name}: tersimpan ${Fmt.rp(drift.stored)}, " +
+                                    "seharusnya ${Fmt.rp(drift.expected)} " +
+                                    "(selisih ${Fmt.rp(drift.difference)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Muted,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedActionButton(
+                            text = "Perbaiki sekarang",
+                            onClick = {
+                                vm.fixConsistency(onDone = { runAudit() })
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = StatusOrange,
+                        )
+                    }
+                }
+                if (auditError != null) {
+                    Text(
+                        text = auditError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+
+        item {
             SectionCard(title = "Data & reset") {
                 Text(
                     text = "Tindakan ini menghapus data secara permanen. Ekspor backup dulu jika ragu.",
@@ -319,21 +408,37 @@ fun SettingsTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
     }
 
-    if (confirmRestore) {
+    preview?.let { info ->
         ConfirmDialog(
-            title = "Pulihkan backup?",
-            message = "Semua dompet, transaksi, aksi cepat, target, snapshot, dan catatan " +
-                "transfer akan diganti isi file backup. Tidak bisa dibatalkan.",
-            confirmLabel = "Pilih file",
-            destructive = false,
+            title = "Ganti data dengan backup ini?",
+            message = "File versi ${info.version}, diekspor " +
+                "${if (info.exportedAt > 0) Fmt.timestamp(info.exportedAt) else "tanpa tanggal"}.\n\n" +
+                "${info.wallets} dompet · ${info.transactions} transaksi · " +
+                "${info.transfers} transfer · ${info.goals} target · " +
+                "${info.quickActions} aksi cepat · ${info.snapshots} snapshot.\n\n" +
+                "Seluruh data saat ini akan diganti dan tidak bisa dikembalikan.",
+            confirmLabel = "Ganti data",
             onConfirm = {
-                importLauncher.launch(
-                    arrayOf("application/json", "text/plain", "application/octet-stream"),
-                )
+                val uri = pendingUri
+                preview = null
+                pendingUri = null
+                if (uri != null) {
+                    vm.importBackup(
+                        uri = uri,
+                        onError = { backupMessage = it; backupFailed = true },
+                        onDone = { backupMessage = "Backup berhasil dipulihkan."; backupFailed = false },
+                    )
+                }
             },
-            onDismiss = { confirmRestore = false },
+            onDismiss = { preview = null; pendingUri = null },
         )
     }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1_048_576 -> String.format("%.1f MB", bytes / 1_048_576.0)
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
 }
 
 @Composable

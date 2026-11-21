@@ -3,8 +3,10 @@ package com.nabungah.ui
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.roundToLong
 
 /**
@@ -90,6 +92,38 @@ object Fmt {
     /** "21 Nov 2026" for transaction date groups. */
     fun dayLabel(millis: Long): String =
         SimpleDateFormat("d MMM yyyy", ID).format(Date(millis))
+
+    /** "21 Nov 2026" for a date picker button. */
+    fun dateLabel(millis: Long): String =
+        SimpleDateFormat("d MMM yyyy", ID).format(Date(millis))
+
+    /** UTC midnight for the date of [millis], the value Material's DatePicker expects. */
+    fun utcDateMillis(millis: Long): Long {
+        val local = Calendar.getInstance().apply { timeInMillis = millis }
+        return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
+        }.timeInMillis
+    }
+
+    /** Combines a DatePicker UTC day with the current wall-clock time in the device zone. */
+    fun mergePickedDate(pickedUtcMillis: Long): Long {
+        val picked = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = pickedUtcMillis
+        }
+        val now = Calendar.getInstance()
+        return Calendar.getInstance().apply {
+            clear()
+            set(
+                picked.get(Calendar.YEAR),
+                picked.get(Calendar.MONTH),
+                picked.get(Calendar.DAY_OF_MONTH),
+                now.get(Calendar.HOUR_OF_DAY),
+                now.get(Calendar.MINUTE),
+                now.get(Calendar.SECOND),
+            )
+        }.timeInMillis
+    }
 
     /** Stable grouping key for a day: "2026-11-21". */
     fun dayKey(millis: Long): String =
