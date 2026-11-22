@@ -103,6 +103,31 @@ fun monthCopyText(
     }
 }
 
+/** Full activity block for one month: every transaction with date, type, wallet, and note. */
+fun monthActivityCopyText(
+    month: String,
+    transactions: List<Trx>,
+    walletNames: Map<Long, String>,
+): String = buildString {
+    val rows = transactions
+        .filter { it.month == month }
+        .sortedByDescending { it.occurredAt }
+    append("*Nabungah — Aktivitas ${Fmt.monthLabel(month)}*\n")
+    append("${rows.size} transaksi")
+    if (rows.isEmpty()) {
+        append("\n\nBelum ada transaksi.")
+    } else {
+        rows.forEach { t ->
+            val income = t.type == "income"
+            append("\n\n${Fmt.timestamp(t.occurredAt)} · ${t.title}\n")
+            append("${if (income) "Pemasukan" else "Pengeluaran"} · ")
+            append((if (income) "+ " else "- ") + Fmt.rp(t.amount) + "\n")
+            append("Dompet: ${walletNames[t.walletId] ?: "Dompet dihapus"}\n")
+            append("Catatan: ${t.note.ifBlank { "-" }}")
+        }
+    }
+}
+
 private fun signed(value: Long): String =
     if (value < 0) "- " + Fmt.rp(-value) else "+ " + Fmt.rp(value)
 
@@ -112,7 +137,12 @@ private fun copyToClipboard(context: Context, label: String, text: String) {
 }
 
 @Composable
-fun CopyButton(text: String, modifier: Modifier = Modifier) {
+fun CopyButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    label: String = "Salin",
+    compact: Boolean = true,
+) {
     var copied by remember { mutableStateOf(false) }
     val context = LocalContext.current
     LaunchedEffect(copied) {
@@ -122,14 +152,14 @@ fun CopyButton(text: String, modifier: Modifier = Modifier) {
         }
     }
     OutlinedActionButton(
-        text = if (copied) "✓ Tersalin" else "Salin",
+        text = if (copied) "✓ Tersalin" else label,
         onClick = {
             copyToClipboard(context, "Nabungah", text)
             copied = true
         },
         modifier = modifier,
         color = if (copied) IncomeGreen else Muted,
-        compact = true,
+        compact = compact,
     )
 }
 
@@ -359,7 +389,11 @@ fun TransactionDetailSheet(
                 "Catatan: ${trx.note.ifBlank { "-" }}",
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CopyButton(text = trxCopyText(trx, walletName), modifier = Modifier.weight(1f))
+            CopyButton(
+                text = trxCopyText(trx, walletName),
+                modifier = Modifier.weight(1f),
+                compact = false,
+            )
             OutlinedActionButton(
                 text = "Edit",
                 onClick = onEdit,

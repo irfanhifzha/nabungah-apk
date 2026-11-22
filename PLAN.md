@@ -125,3 +125,6 @@ INI RENCANA UNTUK VERSI `1.3`.
 
 - [ ] Jarak 8dp antara tombol **"Edit laporan manual"** dan **"Kembalikan ke otomatis"** di
   kartu "Simpan atau edit" halaman Laporan.
+- [ ] Tombol **"Salin aktivitas"** di Laporan menyalin seluruh transaksi bulan terpilih
+  (tanggal, tipe, nominal, dompet, catatan), bukan hanya per item.
+- [ ] Tombol **"Salin"** dan **"Edit"** di sheet Detail Transaksi memakai tinggi yang sama.

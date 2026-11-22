@@ -3,6 +3,7 @@ package com.nabungah
 import com.nabungah.data.Snapshot
 import com.nabungah.data.Trx
 import com.nabungah.ui.buildMonthReport
+import com.nabungah.ui.monthActivityCopyText
 import com.nabungah.ui.monthCopyText
 import com.nabungah.ui.snapshotCopyText
 import com.nabungah.ui.trxCopyText
@@ -153,5 +154,45 @@ class CopyTextTest {
             02/11 Gaji — + Rp 1.500.000 · Cash
         """.trimIndent()
         assertEquals(expected, monthCopyText("2026-11", report, transactions, mapOf(1L to "Cash")))
+    }
+
+    @Test
+    fun monthActivityCopyBlockIncludesEveryField() {
+        val transactions = listOf(
+            trx(
+                id = 1,
+                title = "Kopi",
+                amount = 20_000,
+                type = "expense",
+                note = "pagi",
+                at = millis(2026, Calendar.NOVEMBER, 21, 14, 5),
+            ),
+            trx(
+                id = 2,
+                title = "Gaji",
+                amount = 1_500_000,
+                type = "income",
+                note = "",
+                at = millis(2026, Calendar.NOVEMBER, 2, 8, 30),
+            ),
+        )
+        val expected = """
+            *Nabungah — Aktivitas November 2026*
+            2 transaksi
+
+            Sab, 21/11/2026, 14:05 · Kopi
+            Pengeluaran · - Rp 20.000
+            Dompet: Cash
+            Catatan: pagi
+
+            Sen, 02/11/2026, 08:30 · Gaji
+            Pemasukan · + Rp 1.500.000
+            Dompet: Cash
+            Catatan: -
+        """.trimIndent()
+        assertEquals(
+            expected,
+            monthActivityCopyText("2026-11", transactions, mapOf(1L to "Cash")),
+        )
     }
 }

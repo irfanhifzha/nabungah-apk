@@ -272,6 +272,27 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
         }
 
         item {
+            SectionCard(title = "Aktivitas ${Fmt.monthLabel(month)}") {
+                Text(
+                    text = if (report.count == 0) {
+                        "Belum ada transaksi bulan ini."
+                    } else {
+                        "Salin seluruh ${report.count} transaksi bulan ini lengkap dengan tanggal, " +
+                            "tipe, dompet, dan catatan."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                CopyButton(
+                    text = monthActivityCopyText(month, activeData.transactions, data.walletNames),
+                    label = "Salin aktivitas",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        item {
             SectionCard(title = "Saldo saat ini") {
                 AmountRow(
                     "Total saldo",
