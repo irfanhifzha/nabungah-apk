@@ -120,3 +120,8 @@ INI RENCANA UNTUK VERSI `1.3`.
   `assembleRelease` sukses. APK rilis 1.549.702 byte, `versionCode` 6, bertanda tangan
   `CN=Nabungah`.
 - [x] Tag rilis **v1.5.0**.
+
+## Antrean 1.6.0
+
+- [ ] Jarak 8dp antara tombol **"Edit laporan manual"** dan **"Kembalikan ke otomatis"** di
+  kartu "Simpan atau edit" halaman Laporan.

@@ -1,7 +1,7 @@
 # TODO — Nabungah
 
 Ide perbaikan, diurutkan dari yang paling dekat sampai jangka panjang.
-Terakhir diperbarui: 21 November 2026 · versi 1.5.0 (`versionCode` 6).
+Terakhir diperbarui: 23 November 2026 · versi 1.5.0 (`versionCode` 6).
 
 **Cara pakai**
 
@@ -37,6 +37,11 @@ Terakhir diperbarui: 21 November 2026 · versi 1.5.0 (`versionCode` 6).
 - [x] Export backup memakai `JsonWriter` streaming; salinan JSON penuh tidak lagi dibangun di
   memori.
 - [x] Versi naik ke **1.5.0** (`versionCode` 6).
+
+## Antrean 1.6.0
+
+- [ ] Jarak 8dp antara tombol **"Edit laporan manual"** dan **"Kembalikan ke otomatis"** di
+  kartu "Simpan atau edit" halaman Laporan.
 
 ## Selesai di 1.4.1
 

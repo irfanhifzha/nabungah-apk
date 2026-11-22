@@ -394,6 +394,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                 }
 
                 if (isManual) {
+                    Spacer(Modifier.height(8.dp))
                     OutlinedActionButton(
                         text = "Kembalikan ke otomatis",
                         onClick = { resetToAuto() },
@@ -401,6 +402,7 @@ fun ReviewTab(vm: MainViewModel, data: AppData, onSheet: (Sheet) -> Unit) {
                     )
                 }
                 if (isAuto && differs) {
+                    Spacer(Modifier.height(8.dp))
                     OutlinedActionButton(
                         text = "Perbarui laporan otomatis",
                         onClick = { resetToAuto() },
